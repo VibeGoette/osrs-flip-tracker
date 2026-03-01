@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OSRS Flip Tracker</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23ff981f'/%3E%3Ccircle cx='16' cy='16' r='10' fill='%23e8870a'/%3E%3Ctext x='16' y='21' text-anchor='middle' font-size='14' font-weight='bold' fill='%23fff' font-family='sans-serif'%3EGP%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/lucide@0.575.0/dist/umd/lucide.js"></script>
+</head>
+<body>
+  <!-- Auth Modal -->
+  <div id="auth-modal" class="modal-overlay" style="display:none;">
+    <div class="modal auth-modal-box">
+      <div class="modal-header">
+        <h2 class="modal-title" id="auth-modal-title">Login</h2>
+        <button class="icon-btn" aria-label="Close" onclick="closeAuthModal()"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="auth-username">Username</label>
+          <input type="text" id="auth-username" placeholder="Enter username" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label for="auth-password">Password</label>
+          <div class="password-wrap">
+            <input type="password" id="auth-password" placeholder="Enter password">
+            <button type="button" class="password-toggle" onclick="togglePasswordVisibility()" aria-label="Toggle password visibility"><i data-lucide="eye-off"></i></button>
+          </div>
+        </div>
+        <div id="auth-error" class="auth-error"></div>
+        <button class="btn btn-primary btn-full" id="auth-submit-btn" onclick="handleAuthSubmit()">Login</button>
+        <button class="btn btn-ghost btn-full" id="auth-toggle-btn" onclick="toggleAuthMode()">Need an account? Register</button>
+        <div class="auth-divider"><span>or</span></div>
+        <button class="btn btn-outline btn-full" onclick="continueAsGuest()">Continue as Guest</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Item Detail Modal -->
+  <div id="item-modal" class="modal-overlay" style="display:none;">
+    <div class="modal item-modal-box">
+      <div class="modal-header">
+        <div class="item-modal-title-row">
+          <img id="item-modal-icon" src="" alt="" width="36" height="36">
+          <h2 class="modal-title" id="item-modal-name"></h2>
+        </div>
+        <button class="icon-btn" aria-label="Close" onclick="closeItemModal()"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="item-modal-stats" id="item-modal-stats"></div>
+        <div class="item-modal-chart-wrap">
+          <div class="chart-controls">
+            <button class="btn btn-sm btn-ghost active" data-ts="5m" onclick="loadItemChart(this)">5m</button>
+            <button class="btn btn-sm btn-ghost" data-ts="1h" onclick="loadItemChart(this)">1h</button>
+            <button class="btn btn-sm btn-ghost" data-ts="6h" onclick="loadItemChart(this)">6h</button>
+            <button class="btn btn-sm btn-ghost" data-ts="24h" onclick="loadItemChart(this)">24h</button>
+          </div>
+          <canvas id="item-chart" height="260"></canvas>
+        </div>
+        <div class="item-modal-actions">
+          <button class="btn btn-primary" onclick="quickFlipFromModal()"><i data-lucide="plus"></i> Quick Flip</button>
+          <button class="btn btn-outline" onclick="addToWatchlistFromModal()"><i data-lucide="star"></i> Watchlist</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- New Flip Modal -->
+  <div id="flip-modal" class="modal-overlay" style="display:none;">
+    <div class="modal flip-modal-box">
+      <div class="modal-header">
+        <h2 class="modal-title">New Flip</h2>
+        <button class="icon-btn" aria-label="Close" onclick="closeFlipModal()"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Item</label>
+          <div class="autocomplete-wrap">
+            <input type="text" id="flip-item-search" placeholder="Search item..." autocomplete="off" oninput="onFlipItemSearch(this.value)">
+            <div id="flip-item-results" class="autocomplete-results"></div>
+          </div>
+          <input type="hidden" id="flip-item-id">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Buy Price (GP)</label>
+            <input type="text" id="flip-buy-price" placeholder="0" oninput="updateFlipCalc()">
+          </div>
+          <div class="form-group">
+            <label>Sell Price (GP)</label>
+            <input type="text" id="flip-sell-price" placeholder="0" oninput="updateFlipCalc()">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Quantity</label>
+          <input type="number" id="flip-qty" value="1" min="1" oninput="updateFlipCalc()">
+        </div>
+        <div class="form-group">
+          <label>Note (optional)</label>
+          <textarea id="flip-note" rows="2" placeholder="Add a note..."></textarea>
+        </div>
+        <div class="flip-calc-preview" id="flip-calc-preview">
+          <div class="flip-calc-row"><span>Tax per unit</span><span id="fc-tax">0</span></div>
+          <div class="flip-calc-row"><span>Profit per unit</span><span id="fc-profit-unit">0</span></div>
+          <div class="flip-calc-row"><span>Total profit</span><span id="fc-total-profit" class="gp-value">0</span></div>
+          <div class="flip-calc-row"><span>ROI</span><span id="fc-roi">0%</span></div>
+          <div class="flip-calc-row"><span>Break-even sell</span><span id="fc-breakeven">0</span></div>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="createFlip()">Create Flip</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Advance Flip Modal -->
+  <div id="advance-modal" class="modal-overlay" style="display:none;">
+    <div class="modal advance-modal-box">
+      <div class="modal-header">
+        <h2 class="modal-title" id="advance-modal-title">Update Flip</h2>
+        <button class="icon-btn" aria-label="Close" onclick="closeAdvanceModal()"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group" id="advance-price-group" style="display:none;">
+          <label id="advance-price-label">Actual Price (GP)</label>
+          <input type="text" id="advance-price-input" placeholder="0">
+        </div>
+        <p id="advance-msg"></p>
+        <button class="btn btn-primary btn-full" id="advance-confirm-btn" onclick="confirmAdvance()">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm Delete Modal -->
+  <div id="delete-modal" class="modal-overlay" style="display:none;">
+    <div class="modal delete-modal-box">
+      <div class="modal-header">
+        <h2 class="modal-title">Delete Flip</h2>
+        <button class="icon-btn" aria-label="Close" onclick="closeDeleteModal()"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <p>Are you sure you want to delete this flip? This cannot be undone.</p>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" onclick="closeDeleteModal()">Cancel</button>
+          <button class="btn btn-danger" id="delete-confirm-btn">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container"></div>
+
+  <!-- Dashboard Layout -->
+  <div class="dashboard">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-left">
+        <button class="icon-btn sidebar-toggle" aria-label="Toggle sidebar" onclick="toggleSidebar()">
+          <i data-lucide="menu"></i>
+        </button>
+        <div class="logo">
+          <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="16" cy="16" r="13" fill="#ff981f" fill-opacity="0.2" stroke="#ff981f" stroke-width="1.5"/>
+            <circle cx="16" cy="16" r="8" fill="#ff981f" fill-opacity="0.35"/>
+            <text x="16" y="20.5" text-anchor="middle" font-size="12" font-weight="bold" fill="#ff981f" font-family="Oswald, sans-serif">GP</text>
+          </svg>
+          <span class="logo-text">OSRS Flip Tracker</span>
+        </div>
+      </div>
+      <div class="header-right">
+        <span class="update-badge" id="update-badge" title="Last API update">
+          <i data-lucide="wifi" style="width:14px;height:14px;"></i>
+          <span id="update-timer">--</span>
+        </span>
+        <button class="btn btn-sm btn-ghost" id="auth-btn" onclick="openAuthModal()">
+          <i data-lucide="user"></i>
+          <span id="auth-btn-label">Login</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Sidebar -->
+    <nav class="sidebar" id="sidebar">
+      <div class="nav-items">
+        <a href="#scanner" class="nav-item active" data-page="scanner">
+          <i data-lucide="scan-search"></i>
+          <span>Scanner</span>
+        </a>
+        <a href="#flips" class="nav-item" data-page="flips">
+          <i data-lucide="kanban"></i>
+          <span>Flips</span>
+        </a>
+        <a href="#calculator" class="nav-item" data-page="calculator">
+          <i data-lucide="calculator"></i>
+          <span>Calculator</span>
+        </a>
+        <a href="#watchlist" class="nav-item" data-page="watchlist">
+          <i data-lucide="star"></i>
+          <span>Watchlist</span>
+        </a>
+        <a href="#stats" class="nav-item" data-page="stats">
+          <i data-lucide="bar-chart-3"></i>
+          <span>Stats</span>
+        </a>
+        <a href="#guides" class="nav-item" data-page="guides">
+          <i data-lucide="book-open"></i>
+          <span>Guides</span>
+        </a>
+        <div class="nav-spacer"></div>
+        <a href="#settings" class="nav-item" data-page="settings">
+          <i data-lucide="settings"></i>
+          <span>Settings</span>
+        </a>
+      </div>
+    </nav>
+
+    <!-- Mobile Bottom Bar -->
+    <nav class="bottom-bar" id="bottom-bar">
+      <a href="#scanner" class="bottom-item active" data-page="scanner">
+        <i data-lucide="scan-search"></i>
+        <span>Scanner</span>
+      </a>
+      <a href="#flips" class="bottom-item" data-page="flips">
+        <i data-lucide="kanban"></i>
+        <span>Flips</span>
+      </a>
+      <a href="#calculator" class="bottom-item" data-page="calculator">
+        <i data-lucide="calculator"></i>
+        <span>Calc</span>
+      </a>
+      <a href="#watchlist" class="bottom-item" data-page="watchlist">
+        <i data-lucide="star"></i>
+        <span>Watch</span>
+      </a>
+      <a href="#stats" class="bottom-item" data-page="stats">
+        <i data-lucide="bar-chart-3"></i>
+        <span>Stats</span>
+      </a>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main" id="main-content">
+      <!-- Scanner Page -->
+      <section class="page" id="page-scanner" style="display:none;">
+        <div class="page-header">
+          <h1>Market Scanner</h1>
+          <div class="scanner-meta">
+            <span id="scanner-count">0 items</span>
+            <span class="separator">·</span>
+            <span id="scanner-updated">Loading...</span>
+          </div>
+        </div>
+        <div class="scanner-toolbar">
+          <div class="search-wrap">
+            <i data-lucide="search"></i>
+            <input type="text" id="scanner-search" placeholder="Search items..." autocomplete="off">
+          </div>
+          <div class="filter-pills">
+            <button class="pill active" data-filter="all" onclick="setScannerFilter('all', this)">All</button>
+            <button class="pill" data-filter="best" onclick="setScannerFilter('best', this)">Best Margins</button>
+            <button class="pill" data-filter="volume" onclick="setScannerFilter('volume', this)">High Volume</button>
+            <button class="pill" data-filter="f2p" onclick="setScannerFilter('f2p', this)">F2P Only</button>
+            <button class="pill" data-filter="members" onclick="setScannerFilter('members', this)">Members</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table" id="scanner-table">
+            <thead>
+              <tr>
+                <th class="col-icon"></th>
+                <th class="col-name sortable" data-sort="name" onclick="toggleScannerSort('name')">Item <i data-lucide="arrow-up-down" style="width:14px;height:14px;opacity:0.4"></i></th>
+                <th class="col-num sortable" data-sort="high" onclick="toggleScannerSort('high')">Buy <i data-lucide="arrow-up-down" style="width:14px;height:14px;opacity:0.4"></i></th>
+                <th class="col-num sortable" data-sort="low" onclick="toggleScannerSort('low')">Sell <i data-lucide="arrow-up-down" style="width:14px;height:14px;opacity:0.4"></i></th>
+                <th class="col-num sortable" data-sort="margin" onclick="toggleScannerSort('margin')">Margin <i data-lucide="arrow-up-down" style="width:14px;height:14px;opacity:0.4"></i></th>
+                <th class="col-num sortable sorted-desc" data-sort="marginTax" onclick="toggleScannerSort('marginTax')">After Tax <i data-lucide="arrow-down" style="width:14px;height:14px;"></i></th>
+                <th class="col-num sortable" data-sort="roi" onclick="toggleScannerSort('roi')">ROI% <i data-lucide="arrow-up-down" style="width:14px;height:14px;opacity:0.4"></i></th>
+                <th class="col-num sortable" data-sort="volume" onclick="toggleScannerSort('volume')">Volume <i data-lucide="arrow-up-down" style="width:14px;height:14px;opacity:0.4"></i></th>
+                <th class="col-num sortable" data-sort="alch" onclick="toggleScannerSort('alch')">Alch <i data-lucide="arrow-up-down" style="width:14px;height:14px;opacity:0.4"></i></th>
+                <th class="col-actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="scanner-tbody"></tbody>
+          </table>
+        </div>
+        <div class="load-more-wrap" id="load-more-wrap" style="display:none;">
+          <button class="btn btn-outline" id="load-more-btn" onclick="loadMoreScannerRows()">Load More</button>
+        </div>
+        <div class="scanner-loading" id="scanner-loading">
+          <div class="spinner"></div>
+          <span>Loading market data...</span>
+        </div>
+      </section>
+
+      <!-- Flips Page -->
+      <section class="page" id="page-flips" style="display:none;">
+        <div class="page-header">
+          <h1>Flip Tracker</h1>
+          <button class="btn btn-new-flip" onclick="openFlipModal()"><i data-lucide="plus"></i> New Flip</button>
+        </div>
+        <div class="kanban" id="kanban">
+          <div class="kanban-col" data-status="planning" ondragover="onDragOver(event)" ondrop="onDrop(event, 'planning')">
+            <div class="kanban-col-header" style="border-color:#64748b"><span>Planning</span><span class="kanban-count" id="count-planning">0</span></div>
+            <div class="kanban-cards" id="cards-planning"></div>
+          </div>
+          <div class="kanban-col" data-status="buying" ondragover="onDragOver(event)" ondrop="onDrop(event, 'buying')">
+            <div class="kanban-col-header" style="border-color:#eab308"><span>Buying</span><span class="kanban-count" id="count-buying">0</span></div>
+            <div class="kanban-cards" id="cards-buying"></div>
+          </div>
+          <div class="kanban-col" data-status="bought" ondragover="onDragOver(event)" ondrop="onDrop(event, 'bought')">
+            <div class="kanban-col-header" style="border-color:#f97316"><span>Bought</span><span class="kanban-count" id="count-bought">0</span></div>
+            <div class="kanban-cards" id="cards-bought"></div>
+          </div>
+          <div class="kanban-col" data-status="selling" ondragover="onDragOver(event)" ondrop="onDrop(event, 'selling')">
+            <div class="kanban-col-header" style="border-color:#ff981f"><span>Selling</span><span class="kanban-count" id="count-selling">0</span></div>
+            <div class="kanban-cards" id="cards-selling"></div>
+          </div>
+          <div class="kanban-col" data-status="sold" ondragover="onDragOver(event)" ondrop="onDrop(event, 'sold')">
+            <div class="kanban-col-header" style="border-color:#22c55e"><span>Sold</span><span class="kanban-count" id="count-sold">0</span></div>
+            <div class="kanban-cards" id="cards-sold"></div>
+          </div>
+          <div class="kanban-col" data-status="completed" ondragover="onDragOver(event)" ondrop="onDrop(event, 'completed')">
+            <div class="kanban-col-header" style="border-color:#00ff00"><span>Completed</span><span class="kanban-count" id="count-completed">0</span></div>
+            <div class="kanban-cards" id="cards-completed"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Calculator Page -->
+      <section class="page" id="page-calculator" style="display:none;">
+        <div class="page-header">
+          <h1>GE Tax Calculator</h1>
+        </div>
+        <div class="calc-layout">
+          <div class="calc-inputs card">
+            <div class="form-group">
+              <label>Item (optional)</label>
+              <div class="autocomplete-wrap">
+                <input type="text" id="calc-item-search" placeholder="Search item for auto-fill..." autocomplete="off" oninput="onCalcItemSearch(this.value)">
+                <div id="calc-item-results" class="autocomplete-results"></div>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Buy Price (GP)</label>
+                <input type="text" id="calc-buy" placeholder="0" oninput="updateCalc()">
+              </div>
+              <div class="form-group">
+                <label>Sell Price (GP)</label>
+                <input type="text" id="calc-sell" placeholder="0" oninput="updateCalc()">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Quantity</label>
+              <input type="number" id="calc-qty" value="1" min="1" oninput="updateCalc()">
+            </div>
+          </div>
+          <div class="calc-results">
+            <div class="calc-hero card">
+              <span class="calc-hero-label">Total Profit After Tax</span>
+              <span class="calc-hero-value" id="calc-total-profit">0 GP</span>
+            </div>
+            <div class="calc-grid">
+              <div class="calc-stat card">
+                <span class="calc-stat-label">Tax Per Unit</span>
+                <span class="calc-stat-value" id="calc-tax-unit">0</span>
+              </div>
+              <div class="calc-stat card">
+                <span class="calc-stat-label">Gross Margin</span>
+                <span class="calc-stat-value" id="calc-gross">0</span>
+              </div>
+              <div class="calc-stat card">
+                <span class="calc-stat-label">Net Profit / Unit</span>
+                <span class="calc-stat-value" id="calc-net-unit">0</span>
+              </div>
+              <div class="calc-stat card">
+                <span class="calc-stat-label">Total Tax Paid</span>
+                <span class="calc-stat-value" id="calc-total-tax">0</span>
+              </div>
+              <div class="calc-stat card">
+                <span class="calc-stat-label">ROI %</span>
+                <span class="calc-stat-value" id="calc-roi">0%</span>
+              </div>
+              <div class="calc-stat card">
+                <span class="calc-stat-label">Break-even Sell</span>
+                <span class="calc-stat-value" id="calc-breakeven">0</span>
+              </div>
+              <div class="calc-stat card">
+                <span class="calc-stat-label">GE Buy Limit</span>
+                <span class="calc-stat-value" id="calc-limit">—</span>
+              </div>
+              <div class="calc-stat card">
+                <span class="calc-stat-label">Max Profit at Limit</span>
+                <span class="calc-stat-value" id="calc-max-profit">—</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Watchlist Page -->
+      <section class="page" id="page-watchlist" style="display:none;">
+        <div class="page-header">
+          <h1>Watchlist</h1>
+          <div class="header-actions">
+            <div class="autocomplete-wrap watchlist-add-wrap">
+              <input type="text" id="watchlist-add-search" placeholder="Add item..." autocomplete="off" oninput="onWatchlistSearch(this.value)">
+              <div id="watchlist-add-results" class="autocomplete-results"></div>
+            </div>
+          </div>
+        </div>
+        <div class="watchlist-content" id="watchlist-content">
+          <div class="empty-state" id="watchlist-empty">
+            <i data-lucide="star" style="width:56px;height:56px;"></i>
+            <p>No items in watchlist</p>
+            <span class="text-muted">Add items from the Scanner or search above</span>
+            <a href="#scanner" class="btn btn-outline"><i data-lucide="scan-search"></i> Browse Scanner</a>
+          </div>
+          <table class="data-table" id="watchlist-table" style="display:none;">
+            <thead>
+              <tr>
+                <th class="col-icon"></th>
+                <th class="col-name">Item</th>
+                <th class="col-num">Buy</th>
+                <th class="col-num">Sell</th>
+                <th class="col-num">Margin</th>
+                <th class="col-num">Volume</th>
+                <th class="col-actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="watchlist-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Stats Page -->
+      <section class="page" id="page-stats" style="display:none;">
+        <div class="page-header">
+          <h1>Session Stats</h1>
+        </div>
+        <div class="stats-kpis" id="stats-kpis">
+          <div class="kpi-card">
+            <span class="kpi-label">Total Profit</span>
+            <span class="kpi-value profit" id="kpi-profit">0 GP</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-label">Avg ROI</span>
+            <span class="kpi-value" id="kpi-roi">0%</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-label">Flips Completed</span>
+            <span class="kpi-value" id="kpi-flips">0</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-label">Tax Paid</span>
+            <span class="kpi-value" id="kpi-tax">0 GP</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-label">Session Time</span>
+            <span class="kpi-value" id="kpi-session"><span class="session-live-dot"></span>0:00:00</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-label">Profit / Hour</span>
+            <span class="kpi-value profit" id="kpi-perhr">0 GP</span>
+          </div>
+        </div>
+        <div class="stats-body">
+          <div class="stats-chart-wrap card">
+            <h3>Profit Over Time</h3>
+            <canvas id="stats-chart" height="240"></canvas>
+            <div class="empty-state-inline" id="stats-chart-empty"><i data-lucide="bar-chart-3" style="width:36px;height:36px;"></i>Complete 2+ flips to see your profit trend</div>
+          </div>
+          <div class="stats-table-wrap card">
+            <h3>Item Breakdown</h3>
+            <table class="data-table" id="stats-table">
+              <thead>
+                <tr>
+                  <th class="col-icon"></th>
+                  <th class="col-name">Item</th>
+                  <th class="col-num">Profit</th>
+                  <th class="col-num">Qty</th>
+                  <th class="col-num">Avg ROI</th>
+                </tr>
+              </thead>
+              <tbody id="stats-tbody"></tbody>
+            </table>
+            <div class="empty-state-inline" id="stats-table-empty">No completed flips yet</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Guides Page -->
+      <section class="page" id="page-guides" style="display:none;">
+        <div class="page-header">
+          <h1>Flipping Guides</h1>
+        </div>
+        <div class="guides-tabs">
+          <button class="pill active" onclick="showGuide('101', this)">Flipping 101</button>
+          <button class="pill" onclick="showGuide('first', this)">Your First Flip</button>
+          <button class="pill" onclick="showGuide('limits', this)">Buy Limits</button>
+          <button class="pill" onclick="showGuide('advanced', this)">Advanced Tips</button>
+        </div>
+        <div class="guide-content card" id="guide-content">
+          <!-- Filled by JS -->
+        </div>
+      </section>
+
+      <!-- Settings Page -->
+      <section class="page" id="page-settings" style="display:none;">
+        <div class="page-header">
+          <h1>Settings</h1>
+        </div>
+        <div class="settings-grid">
+          <div class="settings-section card">
+            <h3>Profile</h3>
+            <div class="form-group">
+              <label>Display Name</label>
+              <input type="text" id="settings-name" placeholder="Enter display name" oninput="updateSettingsName(this.value)">
+            </div>
+          </div>
+          <div class="settings-section card">
+            <h3>RuneLite Integration</h3>
+            <div class="form-group">
+              <label>API Key</label>
+              <div class="input-with-btn">
+                <input type="text" id="settings-api-key" readonly placeholder="No key generated">
+                <button class="btn btn-sm btn-outline" onclick="generateApiKey()">Generate Key</button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Plugin Status</label>
+              <div class="status-badge disconnected"><i data-lucide="wifi-off" style="width:14px;height:14px"></i> Disconnected</div>
+            </div>
+          </div>
+          <div class="settings-section card">
+            <h3>Appearance</h3>
+            <div class="theme-info">
+              <i data-lucide="moon"></i>
+              <span>Dark Mode — OSRS is dark mode. Always has been, always will be.</span>
+            </div>
+          </div>
+          <div class="settings-section card">
+            <h3>Data</h3>
+            <p class="text-muted" style="margin-bottom:12px;">Manage your flip data and export your progress.</p>
+            <div class="settings-data-actions">
+              <button class="btn btn-outline" onclick="exportFlips()"><i data-lucide="download"></i> Export Flips</button>
+              <button class="btn btn-danger" onclick="clearAllData()"><i data-lucide="trash-2"></i> Clear All Data</button>
+            </div>
+          </div>
+          <div class="settings-section card">
+            <h3>About</h3>
+            <p class="text-muted">OSRS Flip Tracker v1.0</p>
+            <p class="text-muted">A Grand Exchange flipping companion for Old School RuneScape players. Built with real-time data from the OSRS Wiki Prices API.</p>
+            <p class="text-muted">Prices update every 60 seconds. Not affiliated with Jagex Ltd.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
