@@ -1,1420 +1,916 @@
 /* ==========================================================================
    OSRS Flip Tracker — app.js
-   Full application logic: State, Router, API, Pages, Auth
-   ========================================================================== */
+   Complete application logic
+========================================================================== */
 
-// ===========================
-// SECTION 1: APP STATE
-// ===========================
+'use strict';
 
-const appState = {
-  users: {},
-  currentUser: null,
-  sessionStart: Date.now(),
-  flips: [],
-  flipIdCounter: 1,
-  watchlist: [],
-  watchlistNames: { default: 'My Watchlist' },
-  settings: { displayName: '', apiKey: '' },
-  // API cache
-  mapping: [],
-  mappingById: {},
-  latestPrices: {},
-  hourlyPrices: {},
-  fiveMinPrices: {},
-  lastFetch: 0,
-  // Scanner state
-  scannerFilter: 'all',
-  scannerSort: { key: 'marginTax', dir: 'desc' },
-  scannerSearch: '',
-  scannerDisplayed: 200,
-  scannerItems: [],
-  // Item modal
-  currentItemId: null,
-  itemChart: null,
-  // Stats chart
-  statsChart: null,
-  // Flip modal state
-  flipEditId: null,
-  advanceFlipId: null,
-  deleteFlipId: null,
-  // Timers
-  refreshTimer: null,
-  sessionTimer: null,
-  updateTimerInterval: null,
-};
+/* ---------- Constants ---------- */
+const STORAGE_KEY = 'osrsFlipTracker_v2';
+const AUTH_KEY    = 'osrsFlipTracker_auth';
+const GE_TAX_RATE = 0.01; // 1% GE tax
 
-// ===========================
-// SECTION 2: UTILITY FUNCTIONS
-// ===========================
+/* ---------- State ---------- */
+let flips      = [];
+let currentUser = null;
+let editingId  = null;
+let deleteId   = null;
+let chartRange = '7d';
+let profitChart = null;
+let dailyChart  = null;
+let itemChart   = null;
+let roiChart    = null;
+let timerInterval = null;
+let sessionStart  = null;
 
-function formatGP(n) {
-  if (n == null || isNaN(n)) return '0';
-  const abs = Math.abs(n);
-  const sign = n < 0 ? '-' : '';
-  if (abs >= 1_000_000_000) return sign + (abs / 1_000_000_000).toFixed(1) + 'B';
-  if (abs >= 1_000_000) return sign + (abs / 1_000_000).toFixed(1) + 'M';
-  if (abs >= 1_000) return sign + (abs / 1_000).toFixed(1) + 'K';
-  return sign + abs.toLocaleString('en-US');
-}
-
-function formatGPFull(n) {
-  if (n == null || isNaN(n)) return '0';
-  return n.toLocaleString('en-US');
-}
-
-function parseGPInput(str) {
-  if (!str) return 0;
-  const cleaned = str.replace(/,/g, '').replace(/\s/g, '');
-  const multipliers = { k: 1000, m: 1000000, b: 1000000000 };
-  const match = cleaned.match(/^(-?\d+\.?\d*)\s*([kmb])?$/i);
-  if (!match) return parseInt(cleaned) || 0;
-  const num = parseFloat(match[1]);
-  const mul = match[2] ? multipliers[match[2].toLowerCase()] : 1;
-  return Math.floor(num * mul);
-}
-
-function calcTax(sellPrice) {
-  return Math.min(Math.floor(sellPrice * 0.01), 5000000);
-}
-
-function calcMarginAfterTax(high, low) {
-  return (high - low) - calcTax(high);
-}
-
-function timeAgo(ts) {
-  const s = Math.floor((Date.now() - ts) / 1000);
-  if (s < 60) return s + 's ago';
-  if (s < 3600) return Math.floor(s / 60) + 'm ago';
-  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
-  return Math.floor(s / 86400) + 'd ago';
-}
-
-function formatDuration(ms) {
-  const s = Math.floor(ms / 1000);
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
-}
-
-function getItemIcon(item) {
-  if (!item || !item.icon) return '';
-  return 'https://oldschool.runescape.wiki/images/' + item.icon.replace(/ /g, '_');
-}
-
-function showToast(msg, type = 'info') {
-  const container = document.getElementById('toast-container');
-  const t = document.createElement('div');
-  t.className = 'toast ' + type;
-  // Add icon based on type
-  const iconMap = { success: 'check-circle', error: 'x-circle', info: 'info' };
-  const iconName = iconMap[type] || 'info';
-  t.innerHTML = `<i data-lucide="${iconName}" class="toast-icon"></i><span>${msg}</span>`;
-  container.appendChild(t);
-  lucide.createIcons({ nameAttr: 'data-lucide', node: t });
-  setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity 0.3s'; }, 2500);
-  setTimeout(() => t.remove(), 3000);
-}
-
-function debounce(fn, ms) {
-  let tid;
-  return function (...args) {
-    clearTimeout(tid);
-    tid = setTimeout(() => fn.apply(this, args), ms);
-  };
-}
-
-function profitClass(n) {
-  if (n > 0) return 'profit';
-  if (n < 0) return 'loss';
-  return '';
-}
-
-// ===========================
-// SECTION 3: ROUTER
-// ===========================
-
-const PAGES = ['scanner', 'flips', 'calculator', 'watchlist', 'stats', 'guides', 'settings'];
-
-function route() {
-  let hash = (location.hash || '#scanner').slice(1);
-  if (!PAGES.includes(hash)) hash = 'scanner';
-
-  PAGES.forEach(p => {
-    const el = document.getElementById('page-' + p);
-    if (el) el.style.display = p === hash ? 'block' : 'none';
-  });
-
-  // Update sidebar
-  document.querySelectorAll('.nav-item, .bottom-item').forEach(a => {
-    a.classList.toggle('active', a.dataset.page === hash);
-  });
-
-  // Page-specific init
-  if (hash === 'scanner') renderScanner();
-  if (hash === 'flips') renderKanban();
-  if (hash === 'watchlist') renderWatchlist();
-  if (hash === 'stats') renderStats();
-  if (hash === 'guides') showGuide('101', document.querySelector('.guides-tabs .pill'));
-  if (hash === 'calculator') updateCalc();
-  if (hash === 'settings') initSettings();
-
-  // Close sidebar on mobile
-  document.getElementById('sidebar').classList.remove('open');
-
-  lucide.createIcons();
-}
-
-window.addEventListener('hashchange', route);
-
-// ===========================
-// SECTION 4: API CLIENT
-// ===========================
-
-const API_BASE = 'https://prices.runescape.wiki/api/v1/osrs';
-const API_HEADERS = { 'User-Agent': 'osrs-flip-tracker - @VibeGoette on GitHub' };
-
-async function apiFetch(url) {
-  const res = await fetch(url, { headers: API_HEADERS });
-  if (!res.ok) throw new Error('API error: ' + res.status);
-  return res.json();
-}
-
-async function loadMapping() {
+/* ==========================================================================
+   Persistence
+========================================================================== */
+function loadData() {
   try {
-    const data = await apiFetch(API_BASE + '/mapping');
-    appState.mapping = data;
-    appState.mappingById = {};
-    data.forEach(item => { appState.mappingById[item.id] = item; });
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      flips = Array.isArray(parsed.flips) ? parsed.flips : [];
+    }
   } catch (e) {
-    console.error('Failed to load mapping:', e);
-    showToast('Failed to load item data', 'error');
+    console.warn('Failed to load data:', e);
+    flips = [];
   }
 }
 
-async function loadPrices() {
+function saveData() {
   try {
-    const [latest, hourly, fiveMin] = await Promise.all([
-      apiFetch(API_BASE + '/latest'),
-      apiFetch(API_BASE + '/1h'),
-      apiFetch(API_BASE + '/5m'),
-    ]);
-    appState.latestPrices = latest.data || {};
-    appState.hourlyPrices = hourly.data || {};
-    appState.fiveMinPrices = fiveMin.data || {};
-    appState.lastFetch = Date.now();
-    updateTimerDisplay();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ flips, version: 2 }));
   } catch (e) {
-    console.error('Failed to load prices:', e);
-    showToast('Failed to load prices', 'error');
+    console.warn('Failed to save data:', e);
   }
 }
 
-async function loadTimeseries(itemId, timestep = '1h') {
+function loadAuth() {
   try {
-    return await apiFetch(`${API_BASE}/timeseries?id=${itemId}&timestep=${timestep}`);
+    const raw = localStorage.getItem(AUTH_KEY);
+    if (raw) currentUser = JSON.parse(raw);
   } catch (e) {
-    console.error('Timeseries error:', e);
-    return null;
+    currentUser = null;
   }
 }
 
-function updateTimerDisplay() {
-  const badge = document.getElementById('update-timer');
-  if (!badge) return;
-  const s = Math.floor((Date.now() - appState.lastFetch) / 1000);
-  badge.textContent = s + 's ago';
+function saveAuth() {
+  try {
+    if (currentUser) localStorage.setItem(AUTH_KEY, JSON.stringify(currentUser));
+    else localStorage.removeItem(AUTH_KEY);
+  } catch (e) {}
 }
 
-// ===========================
-// SECTION 5: SCANNER PAGE
-// ===========================
+/* ==========================================================================
+   Auth
+========================================================================== */
+let authMode = 'login'; // 'login' | 'register'
 
-function buildScannerItems() {
-  const items = [];
-  for (const item of appState.mapping) {
-    const price = appState.latestPrices[item.id];
-    if (!price || !price.high || !price.low) continue;
-    if (price.high <= 0 || price.low <= 0) continue;
-
-    const hourly = appState.hourlyPrices[item.id];
-    const volume = hourly ? (hourly.highPriceVolume || 0) + (hourly.lowPriceVolume || 0) : 0;
-    const margin = price.high - price.low;
-    const marginTax = calcMarginAfterTax(price.high, price.low);
-    const roi = price.low > 0 ? (marginTax / price.low) * 100 : 0;
-
-    items.push({
-      id: item.id,
-      name: item.name,
-      icon: item.icon,
-      members: item.members,
-      high: price.high,
-      low: price.low,
-      margin,
-      marginTax,
-      roi,
-      volume,
-      alch: item.highalch || 0,
-      limit: item.limit || 0,
-    });
-  }
-  return items;
-}
-
-function filterScannerItems(items) {
-  let filtered = items;
-  const search = appState.scannerSearch.toLowerCase();
-
-  if (search) {
-    filtered = filtered.filter(i => i.name.toLowerCase().includes(search));
-  }
-
-  switch (appState.scannerFilter) {
-    case 'best':
-      filtered = filtered.filter(i => i.marginTax > 500 && i.volume > 100);
-      break;
-    case 'volume':
-      break;
-    case 'f2p':
-      filtered = filtered.filter(i => !i.members);
-      break;
-    case 'members':
-      filtered = filtered.filter(i => i.members);
-      break;
-  }
-
-  return filtered;
-}
-
-function sortScannerItems(items) {
-  const { key, dir } = appState.scannerSort;
-  const mult = dir === 'asc' ? 1 : -1;
-
-  if (appState.scannerFilter === 'volume' && key === 'marginTax') {
-    items.sort((a, b) => (b.volume - a.volume));
-    return items;
-  }
-
-  items.sort((a, b) => {
-    let va = a[key], vb = b[key];
-    if (key === 'name') {
-      return mult * va.localeCompare(vb);
-    }
-    return mult * (va - vb);
-  });
-  return items;
-}
-
-function renderScanner() {
-  if (appState.mapping.length === 0) return;
-
-  const loading = document.getElementById('scanner-loading');
-  loading.style.display = 'none';
-
-  const items = buildScannerItems();
-  const filtered = filterScannerItems(items);
-  const sorted = sortScannerItems(filtered);
-  appState.scannerItems = sorted;
-
-  document.getElementById('scanner-count').textContent = sorted.length + ' items';
-  document.getElementById('scanner-updated').textContent = appState.lastFetch ? 'Updated ' + timeAgo(appState.lastFetch) : 'Loading...';
-
-  const tbody = document.getElementById('scanner-tbody');
-  const displayCount = Math.min(appState.scannerDisplayed, sorted.length);
-
-  const rows = [];
-  for (let i = 0; i < displayCount; i++) {
-    const item = sorted[i];
-    rows.push(buildScannerRow(item));
-  }
-  tbody.innerHTML = rows.join('');
-
-  const loadMore = document.getElementById('load-more-wrap');
-  loadMore.style.display = displayCount < sorted.length ? 'block' : 'none';
-  if (displayCount < sorted.length) {
-    document.getElementById('load-more-btn').textContent = `Load More (${displayCount} of ${sorted.length})`;
-  }
-
-  updateSortIndicators();
-  lucide.createIcons();
-}
-
-function buildScannerRow(item) {
-  const iconUrl = getItemIcon(appState.mappingById[item.id]);
-  const isWatched = appState.watchlist.includes(item.id);
-  return `<tr>
-    <td class="col-icon"><img src="${iconUrl}" alt="" width="30" height="30" loading="lazy" style="image-rendering:pixelated" onerror="this.style.display='none'"></td>
-    <td class="col-name"><span class="item-name" onclick="openItemModal(${item.id})">${item.name}</span></td>
-    <td class="col-num gp-value">${formatGP(item.high)}</td>
-    <td class="col-num gp-value">${formatGP(item.low)}</td>
-    <td class="col-num"><span class="${profitClass(item.margin)}">${formatGP(item.margin)}</span></td>
-    <td class="col-num"><span class="${profitClass(item.marginTax)}">${formatGP(item.marginTax)}</span></td>
-    <td class="col-num"><span class="${item.roi > 0 ? 'profit' : item.roi < 0 ? 'loss' : ''}">${item.roi.toFixed(1)}%</span></td>
-    <td class="col-num tabnum">${item.volume.toLocaleString('en-US')}</td>
-    <td class="col-num gp-value">${item.alch > 0 ? formatGP(item.alch) : '—'}</td>
-    <td class="col-actions"><div class="action-btns">
-      <button class="icon-btn" aria-label="Quick Flip" onclick="quickFlip(${item.id})" title="Quick Flip"><i data-lucide="clipboard-plus"></i></button>
-      <button class="icon-btn" aria-label="${isWatched ? 'Remove from Watchlist' : 'Add to Watchlist'}" onclick="toggleWatchlist(${item.id})" title="Watchlist"><i data-lucide="${isWatched ? 'star' : 'star'}" ${isWatched ? 'style="color:var(--gold);fill:var(--gold)"' : ''}></i></button>
-    </div></td>
-  </tr>`;
-}
-
-function loadMoreScannerRows() {
-  appState.scannerDisplayed += 200;
-  renderScanner();
-}
-
-function toggleScannerSort(key) {
-  if (appState.scannerSort.key === key) {
-    appState.scannerSort.dir = appState.scannerSort.dir === 'desc' ? 'asc' : 'desc';
+function openAuthModal(mode = 'login') {
+  authMode = mode;
+  const modal = document.getElementById('auth-modal');
+  const title = document.getElementById('auth-modal-title');
+  const submitBtn = document.getElementById('auth-submit-btn');
+  const switchText = document.getElementById('auth-switch-text');
+  if (mode === 'login') {
+    title.textContent = 'Login';
+    submitBtn.textContent = 'Login';
+    switchText.innerHTML = `Don't have an account? <a href="#" onclick="switchAuthMode()">Register</a>`;
   } else {
-    appState.scannerSort.key = key;
-    appState.scannerSort.dir = 'desc';
+    title.textContent = 'Register';
+    submitBtn.textContent = 'Create Account';
+    switchText.innerHTML = `Already have an account? <a href="#" onclick="switchAuthMode()">Login</a>`;
   }
-  appState.scannerDisplayed = 200;
-  renderScanner();
-}
-
-function updateSortIndicators() {
-  document.querySelectorAll('#scanner-table th.sortable').forEach(th => {
-    th.classList.remove('sorted-asc', 'sorted-desc');
-    const icon = th.querySelector('i');
-    if (icon) {
-      icon.setAttribute('data-lucide', 'arrow-up-down');
-      icon.style.opacity = '0.4';
-    }
-  });
-  const activeTh = document.querySelector(`#scanner-table th[data-sort="${appState.scannerSort.key}"]`);
-  if (activeTh) {
-    const cls = 'sorted-' + appState.scannerSort.dir;
-    activeTh.classList.add(cls);
-    const icon = activeTh.querySelector('i');
-    if (icon) {
-      icon.setAttribute('data-lucide', appState.scannerSort.dir === 'asc' ? 'arrow-up' : 'arrow-down');
-      icon.style.opacity = '1';
-    }
-  }
-}
-
-function setScannerFilter(filter, btn) {
-  appState.scannerFilter = filter;
-  appState.scannerDisplayed = 200;
-  document.querySelectorAll('.filter-pills .pill').forEach(p => p.classList.remove('active'));
-  if (btn) btn.classList.add('active');
-  renderScanner();
-}
-
-// Search debounce
-const scannerSearchInput = document.getElementById('scanner-search');
-if (scannerSearchInput) {
-  scannerSearchInput.addEventListener('input', debounce(function () {
-    appState.scannerSearch = this.value;
-    appState.scannerDisplayed = 200;
-    renderScanner();
-  }, 300));
-}
-
-// ===========================
-// SECTION 6: ITEM DETAIL MODAL
-// ===========================
-
-function openItemModal(itemId) {
-  appState.currentItemId = itemId;
-  const item = appState.mappingById[itemId];
-  const price = appState.latestPrices[itemId];
-  if (!item || !price) return;
-
-  document.getElementById('item-modal-icon').src = getItemIcon(item);
-  document.getElementById('item-modal-name').textContent = item.name;
-
-  const hourly = appState.hourlyPrices[itemId];
-  const vol = hourly ? (hourly.highPriceVolume || 0) + (hourly.lowPriceVolume || 0) : 0;
-  const margin = (price.high || 0) - (price.low || 0);
-  const marginTax = calcMarginAfterTax(price.high || 0, price.low || 0);
-
-  document.getElementById('item-modal-stats').innerHTML = `
-    <div class="item-stat"><span class="item-stat-label">Buy Price</span><span class="item-stat-value gp-value">${formatGPFull(price.high)}</span></div>
-    <div class="item-stat"><span class="item-stat-label">Sell Price</span><span class="item-stat-value gp-value">${formatGPFull(price.low)}</span></div>
-    <div class="item-stat"><span class="item-stat-label">Margin (tax)</span><span class="item-stat-value ${profitClass(marginTax)}">${formatGPFull(marginTax)}</span></div>
-    <div class="item-stat"><span class="item-stat-label">Volume (1h)</span><span class="item-stat-value tabnum">${vol.toLocaleString()}</span></div>
-    <div class="item-stat"><span class="item-stat-label">High Alch</span><span class="item-stat-value gp-value">${item.highalch ? formatGPFull(item.highalch) : '—'}</span></div>
-    <div class="item-stat"><span class="item-stat-label">Buy Limit</span><span class="item-stat-value tabnum">${item.limit ? item.limit.toLocaleString() : '—'}</span></div>
-  `;
-
-  document.getElementById('item-modal').style.display = 'flex';
-  document.querySelectorAll('.chart-controls .btn').forEach(b => b.classList.remove('active'));
-  document.querySelector('.chart-controls .btn[data-ts="1h"]').classList.add('active');
-  loadItemChartData(itemId, '1h');
-  lucide.createIcons();
-}
-
-function closeItemModal() {
-  document.getElementById('item-modal').style.display = 'none';
-  if (appState.itemChart) { appState.itemChart.destroy(); appState.itemChart = null; }
-}
-
-function loadItemChart(btn) {
-  document.querySelectorAll('.chart-controls .btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  loadItemChartData(appState.currentItemId, btn.dataset.ts);
-}
-
-async function loadItemChartData(itemId, timestep) {
-  const canvas = document.getElementById('item-chart');
-  if (appState.itemChart) { appState.itemChart.destroy(); appState.itemChart = null; }
-
-  const data = await loadTimeseries(itemId, timestep);
-  if (!data || !data.data || data.data.length === 0) return;
-
-  const points = data.data.slice(-100);
-  const labels = points.map(p => {
-    const d = new Date(p.timestamp * 1000);
-    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-  });
-  const highs = points.map(p => p.avgHighPrice);
-  const lows = points.map(p => p.avgLowPrice);
-
-  appState.itemChart = new Chart(canvas.getContext('2d'), {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [
-        { label: 'Buy (Insta-buy)', data: highs, borderColor: '#ff981f', backgroundColor: 'rgba(255,152,31,0.1)', fill: false, tension: 0.3, pointRadius: 0, borderWidth: 2 },
-        { label: 'Sell (Insta-sell)', data: lows, borderColor: '#5dadec', backgroundColor: 'rgba(93,173,236,0.1)', fill: false, tension: 0.3, pointRadius: 0, borderWidth: 2 },
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { intersect: false, mode: 'index' },
-      plugins: {
-        legend: { display: true, labels: { color: '#999', font: { size: 11 }, boxWidth: 12 } },
-        tooltip: {
-          backgroundColor: '#1a1a1a', borderColor: '#3a3a3a', borderWidth: 1,
-          titleColor: '#fff', bodyColor: '#c8c8c8',
-          callbacks: { label: ctx => ctx.dataset.label + ': ' + (ctx.parsed.y ? ctx.parsed.y.toLocaleString() + ' GP' : 'N/A') }
-        }
-      },
-      scales: {
-        x: { ticks: { color: '#666', font: { size: 10 }, maxTicksLimit: 8 }, grid: { color: 'rgba(58,58,58,0.3)' } },
-        y: { ticks: { color: '#666', font: { size: 10 }, callback: v => formatGP(v) }, grid: { color: 'rgba(58,58,58,0.3)' } }
-      }
-    }
-  });
-}
-
-function quickFlipFromModal() {
-  const id = appState.currentItemId;
-  closeItemModal();
-  quickFlip(id);
-}
-
-function addToWatchlistFromModal() {
-  toggleWatchlist(appState.currentItemId);
-  closeItemModal();
-}
-
-// ===========================
-// SECTION 7: GE TAX CALCULATOR
-// ===========================
-
-let calcSelectedItem = null;
-
-function onCalcItemSearch(val) {
-  const results = document.getElementById('calc-item-results');
-  if (!val || val.length < 2) { results.classList.remove('open'); return; }
-  const matches = appState.mapping.filter(i => i.name.toLowerCase().includes(val.toLowerCase())).slice(0, 15);
-  if (matches.length === 0) { results.classList.remove('open'); return; }
-  results.innerHTML = matches.map(i => `<div class="ac-item" onclick="selectCalcItem(${i.id})"><img src="${getItemIcon(i)}" alt="" width="24" height="24" onerror="this.style.display='none'">${i.name}</div>`).join('');
-  results.classList.add('open');
-}
-
-function selectCalcItem(id) {
-  const item = appState.mappingById[id];
-  const price = appState.latestPrices[id];
-  calcSelectedItem = item;
-  document.getElementById('calc-item-search').value = item.name;
-  document.getElementById('calc-item-results').classList.remove('open');
-  if (price) {
-    document.getElementById('calc-buy').value = price.low || '';
-    document.getElementById('calc-sell').value = price.high || '';
-  }
-  updateCalc();
-}
-
-function updateCalc() {
-  const buy = parseGPInput(document.getElementById('calc-buy').value);
-  const sell = parseGPInput(document.getElementById('calc-sell').value);
-  const qty = parseInt(document.getElementById('calc-qty').value) || 1;
-
-  const tax = calcTax(sell);
-  const gross = sell - buy;
-  const netUnit = sell - buy - tax;
-  const totalNet = netUnit * qty;
-  const totalTax = tax * qty;
-  const roi = buy > 0 ? (netUnit / buy * 100) : 0;
-  const breakeven = buy > 0 ? Math.ceil(buy / 0.99) : 0;
-
-  const heroEl = document.getElementById('calc-total-profit');
-  heroEl.textContent = formatGPFull(totalNet) + ' GP';
-  heroEl.className = 'calc-hero-value ' + (totalNet > 0 ? 'profit' : totalNet < 0 ? 'loss' : 'gp-value');
-  if (totalNet === 0) heroEl.style.color = 'var(--gold)';
-
-  document.getElementById('calc-tax-unit').textContent = formatGPFull(tax);
-  document.getElementById('calc-gross').textContent = formatGPFull(gross);
-  const netEl = document.getElementById('calc-net-unit');
-  netEl.textContent = formatGPFull(netUnit);
-  netEl.className = 'calc-stat-value ' + profitClass(netUnit);
-  document.getElementById('calc-total-tax').textContent = formatGPFull(totalTax);
-  document.getElementById('calc-roi').textContent = roi.toFixed(2) + '%';
-  document.getElementById('calc-roi').className = 'calc-stat-value ' + profitClass(roi);
-  document.getElementById('calc-breakeven').textContent = formatGPFull(breakeven);
-
-  if (calcSelectedItem && calcSelectedItem.limit) {
-    document.getElementById('calc-limit').textContent = calcSelectedItem.limit.toLocaleString() + ' / 4h';
-    const maxProfit = netUnit * calcSelectedItem.limit;
-    const mpEl = document.getElementById('calc-max-profit');
-    mpEl.textContent = formatGPFull(maxProfit);
-    mpEl.className = 'calc-stat-value ' + profitClass(maxProfit);
-  } else {
-    document.getElementById('calc-limit').textContent = '—';
-    document.getElementById('calc-max-profit').textContent = '—';
-    document.getElementById('calc-max-profit').className = 'calc-stat-value';
-  }
-}
-
-// Close autocomplete on outside click
-document.addEventListener('click', function (e) {
-  document.querySelectorAll('.autocomplete-results').forEach(r => {
-    if (!r.parentElement.contains(e.target)) r.classList.remove('open');
-  });
-});
-
-// ===========================
-// SECTION 8: FLIP TASK CARDS (KANBAN)
-// ===========================
-
-const FLIP_STATES = ['planning', 'buying', 'bought', 'selling', 'sold', 'completed'];
-
-function openFlipModal(itemId) {
-  appState.flipEditId = null;
-  document.getElementById('flip-item-search').value = '';
-  document.getElementById('flip-item-id').value = '';
-  document.getElementById('flip-buy-price').value = '';
-  document.getElementById('flip-sell-price').value = '';
-  document.getElementById('flip-qty').value = '1';
-  document.getElementById('flip-note').value = '';
-
-  if (itemId) {
-    const item = appState.mappingById[itemId];
-    const price = appState.latestPrices[itemId];
-    if (item) {
-      document.getElementById('flip-item-search').value = item.name;
-      document.getElementById('flip-item-id').value = itemId;
-    }
-    if (price) {
-      document.getElementById('flip-buy-price').value = price.low || '';
-      document.getElementById('flip-sell-price').value = price.high || '';
-    }
-  }
-
-  updateFlipCalc();
-  document.getElementById('flip-modal').style.display = 'flex';
-  lucide.createIcons();
-}
-
-function closeFlipModal() {
-  document.getElementById('flip-modal').style.display = 'none';
-  document.getElementById('flip-item-results').classList.remove('open');
-}
-
-function quickFlip(itemId) {
-  openFlipModal(itemId);
-}
-
-function onFlipItemSearch(val) {
-  const results = document.getElementById('flip-item-results');
-  if (!val || val.length < 2) { results.classList.remove('open'); return; }
-  const matches = appState.mapping.filter(i => i.name.toLowerCase().includes(val.toLowerCase())).slice(0, 15);
-  if (matches.length === 0) { results.classList.remove('open'); return; }
-  results.innerHTML = matches.map(i => `<div class="ac-item" onclick="selectFlipItem(${i.id})"><img src="${getItemIcon(i)}" alt="" width="24" height="24" onerror="this.style.display='none'">${i.name}</div>`).join('');
-  results.classList.add('open');
-}
-
-function selectFlipItem(id) {
-  const item = appState.mappingById[id];
-  const price = appState.latestPrices[id];
-  document.getElementById('flip-item-search').value = item.name;
-  document.getElementById('flip-item-id').value = id;
-  document.getElementById('flip-item-results').classList.remove('open');
-  if (price) {
-    document.getElementById('flip-buy-price').value = price.low || '';
-    document.getElementById('flip-sell-price').value = price.high || '';
-  }
-  updateFlipCalc();
-}
-
-function updateFlipCalc() {
-  const buy = parseGPInput(document.getElementById('flip-buy-price').value);
-  const sell = parseGPInput(document.getElementById('flip-sell-price').value);
-  const qty = parseInt(document.getElementById('flip-qty').value) || 1;
-
-  const tax = calcTax(sell);
-  const net = sell - buy - tax;
-  const total = net * qty;
-  const roi = buy > 0 ? (net / buy * 100) : 0;
-  const breakeven = buy > 0 ? Math.ceil(buy / 0.99) : 0;
-
-  document.getElementById('fc-tax').textContent = formatGPFull(tax);
-  const profUnitEl = document.getElementById('fc-profit-unit');
-  profUnitEl.textContent = formatGPFull(net);
-  profUnitEl.className = profitClass(net);
-  const totalEl = document.getElementById('fc-total-profit');
-  totalEl.textContent = formatGPFull(total) + ' GP';
-  totalEl.className = 'gp-value ' + profitClass(total);
-  document.getElementById('fc-roi').textContent = roi.toFixed(1) + '%';
-  document.getElementById('fc-breakeven').textContent = formatGPFull(breakeven);
-}
-
-function createFlip() {
-  const itemId = parseInt(document.getElementById('flip-item-id').value);
-  const item = appState.mappingById[itemId];
-  if (!item) { showToast('Please select an item', 'error'); return; }
-
-  const buy = parseGPInput(document.getElementById('flip-buy-price').value);
-  const sell = parseGPInput(document.getElementById('flip-sell-price').value);
-  const qty = parseInt(document.getElementById('flip-qty').value) || 1;
-  const note = document.getElementById('flip-note').value.trim();
-
-  const tax = calcTax(sell);
-  const expectedProfit = (sell - buy - tax) * qty;
-
-  const flip = {
-    id: appState.flipIdCounter++,
-    itemId,
-    itemName: item.name,
-    itemIcon: item.icon,
-    targetBuy: buy,
-    targetSell: sell,
-    actualBuy: null,
-    actualSell: null,
-    quantity: qty,
-    note,
-    status: 'planning',
-    expectedProfit,
-    actualProfit: null,
-    createdAt: Date.now(),
-    completedAt: null,
-  };
-
-  appState.flips.push(flip);
-  closeFlipModal();
-  renderKanban();
-  showToast('Flip created: ' + item.name, 'success');
-}
-
-function renderKanban() {
-  FLIP_STATES.forEach(status => {
-    const container = document.getElementById('cards-' + status);
-    const count = document.getElementById('count-' + status);
-    const flips = appState.flips.filter(f => f.status === status);
-    count.textContent = flips.length;
-    container.innerHTML = flips.map(f => buildFlipCard(f)).join('');
-  });
-  lucide.createIcons();
-}
-
-function buildFlipCard(flip) {
-  const iconUrl = getItemIcon(appState.mappingById[flip.itemId]);
-  const tax = calcTax(flip.targetSell);
-  const expectedPerUnit = flip.targetSell - flip.targetBuy - tax;
-  const displayProfit = flip.actualProfit != null ? flip.actualProfit : flip.expectedProfit;
-
-  let comparisonHtml = '';
-  if (flip.status === 'completed' && flip.actualProfit != null) {
-    const diff = flip.actualProfit - flip.expectedProfit;
-    comparisonHtml = `<div class="flip-card-comparison">
-      <div class="comp-row"><span>Expected</span><span class="${profitClass(flip.expectedProfit)}">${formatGP(flip.expectedProfit)} GP</span></div>
-      <div class="comp-row"><span>Actual</span><span class="${profitClass(flip.actualProfit)}">${formatGP(flip.actualProfit)} GP</span></div>
-      <div class="comp-row"><span>Difference</span><span class="${profitClass(diff)}">${diff >= 0 ? '+' : ''}${formatGP(diff)} GP</span></div>
-    </div>`;
-  }
-
-  const noteHtml = flip.note ? `<div class="flip-card-note">${flip.note}</div>` : '';
-  const nextState = FLIP_STATES[FLIP_STATES.indexOf(flip.status) + 1];
-  const advanceBtn = nextState ? `<button class="icon-btn" aria-label="Advance" title="Move to ${nextState}" onclick="advanceFlip(${flip.id})"><i data-lucide="arrow-right-circle"></i></button>` : '';
-
-  return `<div class="flip-card" draggable="true" ondragstart="onDragStart(event, ${flip.id})" ondragend="onDragEnd(event)" data-flip-id="${flip.id}">
-    <div class="flip-card-top">
-      <img src="${iconUrl}" alt="" width="28" height="28" onerror="this.style.display='none'">
-      <span class="flip-card-name">${flip.itemName}</span>
-    </div>
-    <div class="flip-card-prices">
-      <span>Buy: <span class="val">${formatGP(flip.actualBuy || flip.targetBuy)}</span></span>
-      <span>Sell: <span class="val">${formatGP(flip.actualSell || flip.targetSell)}</span></span>
-      <span>Qty: <span class="val">${flip.quantity}</span></span>
-      <span>ROI: <span class="val">${flip.targetBuy > 0 ? (expectedPerUnit / flip.targetBuy * 100).toFixed(1) : 0}%</span></span>
-    </div>
-    <div class="flip-card-profit ${profitClass(displayProfit)}">${displayProfit >= 0 ? '+' : ''}${formatGP(displayProfit)} GP</div>
-    ${noteHtml}
-    ${comparisonHtml}
-    <div class="flip-card-meta">
-      <span>${timeAgo(flip.createdAt)}</span>
-      <div class="flip-card-actions">
-        ${advanceBtn}
-        <button class="icon-btn" aria-label="Delete" title="Delete flip" onclick="confirmDeleteFlip(${flip.id})"><i data-lucide="trash-2"></i></button>
-      </div>
-    </div>
-  </div>`;
-}
-
-// Drag and Drop
-function onDragStart(e, flipId) {
-  e.dataTransfer.setData('text/plain', flipId);
-  e.target.classList.add('dragging');
-}
-function onDragEnd(e) {
-  e.target.classList.remove('dragging');
-  document.querySelectorAll('.kanban-cards').forEach(c => c.classList.remove('drag-over'));
-}
-function onDragOver(e) {
-  e.preventDefault();
-  const cards = e.target.closest('.kanban-cards') || e.target.querySelector('.kanban-cards');
-  if (cards) cards.classList.add('drag-over');
-}
-function onDrop(e, status) {
-  e.preventDefault();
-  const flipId = parseInt(e.dataTransfer.getData('text/plain'));
-  const flip = appState.flips.find(f => f.id === flipId);
-  if (flip) {
-    flip.status = status;
-    if (status === 'completed') flip.completedAt = Date.now();
-    renderKanban();
-    showToast('Flip moved to ' + status, 'info');
-  }
-  document.querySelectorAll('.kanban-cards').forEach(c => c.classList.remove('drag-over'));
-}
-
-// Advance flip
-function advanceFlip(flipId) {
-  const flip = appState.flips.find(f => f.id === flipId);
-  if (!flip) return;
-  const nextIdx = FLIP_STATES.indexOf(flip.status) + 1;
-  if (nextIdx >= FLIP_STATES.length) return;
-  const nextStatus = FLIP_STATES[nextIdx];
-
-  // Show advance modal
-  appState.advanceFlipId = flipId;
-  const modal = document.getElementById('advance-modal');
-  const priceGroup = document.getElementById('advance-price-group');
-  const priceLabel = document.getElementById('advance-price-label');
-  const msg = document.getElementById('advance-msg');
-  const title = document.getElementById('advance-modal-title');
-
-  title.textContent = `Move to ${nextStatus.charAt(0).toUpperCase() + nextStatus.slice(1)}`;
-
-  if (nextStatus === 'bought') {
-    priceGroup.style.display = 'block';
-    priceLabel.textContent = 'Actual Buy Price (GP)';
-    document.getElementById('advance-price-input').value = flip.targetBuy || '';
-    msg.textContent = 'Enter the actual price you bought at.';
-  } else if (nextStatus === 'sold') {
-    priceGroup.style.display = 'block';
-    priceLabel.textContent = 'Actual Sell Price (GP)';
-    document.getElementById('advance-price-input').value = flip.targetSell || '';
-    msg.textContent = 'Enter the actual price you sold at.';
-  } else {
-    priceGroup.style.display = 'none';
-    msg.textContent = `Move this flip to "${nextStatus}"?`;
-  }
-
+  clearAuthError();
   modal.style.display = 'flex';
-  lucide.createIcons();
-}
-
-function confirmAdvance() {
-  const flipId = appState.advanceFlipId;
-  const flip = appState.flips.find(f => f.id === flipId);
-  if (!flip) return;
-
-  const nextIdx = FLIP_STATES.indexOf(flip.status) + 1;
-  const nextStatus = FLIP_STATES[nextIdx];
-  const priceInput = parseGPInput(document.getElementById('advance-price-input').value);
-
-  flip.status = nextStatus;
-
-  if (nextStatus === 'bought' && priceInput > 0) {
-    flip.actualBuy = priceInput;
-  }
-  if (nextStatus === 'sold' && priceInput > 0) {
-    flip.actualSell = priceInput;
-  }
-  if (nextStatus === 'completed') {
-    flip.completedAt = Date.now();
-    // Calculate actual profit
-    const actualBuy = flip.actualBuy || flip.targetBuy;
-    const actualSell = flip.actualSell || flip.targetSell;
-    const tax = calcTax(actualSell);
-    flip.actualProfit = (actualSell - actualBuy - tax) * flip.quantity;
-  }
-
-  closeAdvanceModal();
-  renderKanban();
-  renderStats();
-  showToast('Flip advanced to ' + nextStatus, 'success');
-}
-
-function closeAdvanceModal() {
-  document.getElementById('advance-modal').style.display = 'none';
-  appState.advanceFlipId = null;
-}
-
-function confirmDeleteFlip(flipId) {
-  appState.deleteFlipId = flipId;
-  const modal = document.getElementById('delete-modal');
-  modal.style.display = 'flex';
-  document.getElementById('delete-confirm-btn').onclick = function () {
-    appState.flips = appState.flips.filter(f => f.id !== flipId);
-    closeDeleteModal();
-    renderKanban();
-    renderStats();
-    showToast('Flip deleted', 'info');
-  };
-  lucide.createIcons();
-}
-
-function closeDeleteModal() {
-  document.getElementById('delete-modal').style.display = 'none';
-  appState.deleteFlipId = null;
-}
-
-// ===========================
-// SECTION 9: WATCHLIST
-// ===========================
-
-function toggleWatchlist(itemId) {
-  const idx = appState.watchlist.indexOf(itemId);
-  if (idx === -1) {
-    appState.watchlist.push(itemId);
-    showToast('Added to watchlist', 'success');
-  } else {
-    appState.watchlist.splice(idx, 1);
-    showToast('Removed from watchlist', 'info');
-  }
-  renderWatchlist();
-}
-
-function onWatchlistSearch(val) {
-  const results = document.getElementById('watchlist-add-results');
-  if (!val || val.length < 2) { results.classList.remove('open'); return; }
-  const matches = appState.mapping.filter(i => i.name.toLowerCase().includes(val.toLowerCase())).slice(0, 15);
-  if (matches.length === 0) { results.classList.remove('open'); return; }
-  results.innerHTML = matches.map(i => `<div class="ac-item" onclick="addToWatchlistById(${i.id})"><img src="${getItemIcon(i)}" alt="" width="24" height="24" onerror="this.style.display='none'">${i.name}</div>`).join('');
-  results.classList.add('open');
-}
-
-function addToWatchlistById(id) {
-  if (!appState.watchlist.includes(id)) {
-    appState.watchlist.push(id);
-    showToast('Added to watchlist', 'success');
-  }
-  document.getElementById('watchlist-add-search').value = '';
-  document.getElementById('watchlist-add-results').classList.remove('open');
-  renderWatchlist();
-}
-
-function renderWatchlist() {
-  const empty = document.getElementById('watchlist-empty');
-  const table = document.getElementById('watchlist-table');
-  const tbody = document.getElementById('watchlist-tbody');
-
-  if (appState.watchlist.length === 0) {
-    empty.style.display = 'flex';
-    table.style.display = 'none';
-    return;
-  }
-
-  empty.style.display = 'none';
-  table.style.display = 'table';
-
-  const rows = appState.watchlist.map(id => {
-    const item = appState.mappingById[id];
-    const price = appState.latestPrices[id];
-    if (!item) return '';
-    const high = price ? price.high : 0;
-    const low = price ? price.low : 0;
-    const margin = high - low;
-    const hourly = appState.hourlyPrices[id];
-    const vol = hourly ? (hourly.highPriceVolume || 0) + (hourly.lowPriceVolume || 0) : 0;
-    const iconUrl = getItemIcon(item);
-    return `<tr>
-      <td class="col-icon"><img src="${iconUrl}" alt="" width="30" height="30" style="image-rendering:pixelated" onerror="this.style.display='none'"></td>
-      <td class="col-name"><span class="item-name" onclick="openItemModal(${id})">${item.name}</span></td>
-      <td class="col-num gp-value">${formatGP(high)}</td>
-      <td class="col-num gp-value">${formatGP(low)}</td>
-      <td class="col-num"><span class="${profitClass(margin)}">${formatGP(margin)}</span></td>
-      <td class="col-num tabnum">${vol.toLocaleString('en-US')}</td>
-      <td class="col-actions"><div class="action-btns">
-        <button class="icon-btn" title="Quick Flip" onclick="quickFlip(${id})"><i data-lucide="clipboard-plus"></i></button>
-        <button class="icon-btn" title="Remove" onclick="toggleWatchlist(${id})"><i data-lucide="x"></i></button>
-      </div></td>
-    </tr>`;
-  }).join('');
-
-  tbody.innerHTML = rows;
-  lucide.createIcons();
-}
-
-// ===========================
-// SECTION 10: STATS
-// ===========================
-
-function renderStats() {
-  const completed = appState.flips.filter(f => f.status === 'completed' && f.actualProfit != null);
-  const totalProfit = completed.reduce((s, f) => s + f.actualProfit, 0);
-  const totalTax = completed.reduce((s, f) => {
-    const actualSell = f.actualSell || f.targetSell;
-    return s + calcTax(actualSell) * f.quantity;
-  }, 0);
-  const avgRoi = completed.length > 0
-    ? completed.reduce((s, f) => {
-        const b = f.actualBuy || f.targetBuy;
-        const sell = f.actualSell || f.targetSell;
-        const tax = calcTax(sell);
-        const roi = b > 0 ? (sell - b - tax) / b * 100 : 0;
-        return s + roi;
-      }, 0) / completed.length
-    : 0;
-
-  document.getElementById('kpi-profit').textContent = formatGP(totalProfit) + ' GP';
-  document.getElementById('kpi-roi').textContent = avgRoi.toFixed(1) + '%';
-  document.getElementById('kpi-flips').textContent = completed.length;
-  document.getElementById('kpi-tax').textContent = formatGP(totalTax) + ' GP';
-
-  const sessionMs = Date.now() - appState.sessionStart;
-  const perHour = sessionMs > 0 ? (totalProfit / (sessionMs / 3600000)) : 0;
-  document.getElementById('kpi-perhr').textContent = formatGP(Math.round(perHour)) + ' GP';
-
-  // Item breakdown table
-  const byItem = {};
-  completed.forEach(f => {
-    if (!byItem[f.itemId]) byItem[f.itemId] = { name: f.itemName, profit: 0, qty: 0, rois: [] };
-    byItem[f.itemId].profit += f.actualProfit;
-    byItem[f.itemId].qty += f.quantity;
-    const b = f.actualBuy || f.targetBuy;
-    const s = f.actualSell || f.targetSell;
-    const t = calcTax(s);
-    if (b > 0) byItem[f.itemId].rois.push((s - b - t) / b * 100);
-  });
-
-  const tbody = document.getElementById('stats-tbody');
-  const empty = document.getElementById('stats-table-empty');
-  const items = Object.entries(byItem).sort((a, b) => b[1].profit - a[1].profit);
-
-  if (items.length === 0) {
-    tbody.innerHTML = '';
-    empty.style.display = 'block';
-  } else {
-    empty.style.display = 'none';
-    const item0 = appState.mappingById[items[0] ? parseInt(items[0][0]) : null];
-    tbody.innerHTML = items.map(([id, data]) => {
-      const item = appState.mappingById[parseInt(id)];
-      const iconUrl = item ? getItemIcon(item) : '';
-      const avgRoiItem = data.rois.length > 0 ? data.rois.reduce((a, b) => a + b, 0) / data.rois.length : 0;
-      return `<tr>
-        <td class="col-icon"><img src="${iconUrl}" alt="" width="30" height="30" style="image-rendering:pixelated" onerror="this.style.display='none'"></td>
-        <td class="col-name">${data.name}</td>
-        <td class="col-num"><span class="${profitClass(data.profit)}">${formatGP(data.profit)} GP</span></td>
-        <td class="col-num tabnum">${data.qty}</td>
-        <td class="col-num"><span class="${profitClass(avgRoiItem)}">${avgRoiItem.toFixed(1)}%</span></td>
-      </tr>`;
-    }).join('');
-  }
-  lucide.createIcons();
-
-  // Stats chart
-  const chartEmpty = document.getElementById('stats-chart-empty');
-  const canvas = document.getElementById('stats-chart');
-
-  if (completed.length < 2) {
-    chartEmpty.style.display = 'block';
-    canvas.style.display = 'none';
-    if (appState.statsChart) { appState.statsChart.destroy(); appState.statsChart = null; }
-    return;
-  }
-
-  chartEmpty.style.display = 'none';
-  canvas.style.display = 'block';
-
-  const sorted = [...completed].sort((a, b) => a.completedAt - b.completedAt);
-  let cumProfit = 0;
-  const chartLabels = sorted.map((f, i) => '#' + (i + 1));
-  const chartData = sorted.map(f => { cumProfit += f.actualProfit; return cumProfit; });
-
-  if (appState.statsChart) { appState.statsChart.destroy(); appState.statsChart = null; }
-
-  appState.statsChart = new Chart(canvas.getContext('2d'), {
-    type: 'line',
-    data: {
-      labels: chartLabels,
-      datasets: [{
-        label: 'Cumulative Profit',
-        data: chartData,
-        borderColor: '#00ff00',
-        backgroundColor: 'rgba(0,255,0,0.06)',
-        fill: true,
-        tension: 0.4,
-        pointRadius: 3,
-        borderWidth: 2,
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: '#1a1a1a', borderColor: '#3a3a3a', borderWidth: 1,
-          titleColor: '#fff', bodyColor: '#c8c8c8',
-          callbacks: { label: ctx => 'Profit: ' + formatGP(ctx.parsed.y) + ' GP' }
-        }
-      },
-      scales: {
-        x: { ticks: { color: '#666', font: { size: 10 } }, grid: { color: 'rgba(58,58,58,0.3)' } },
-        y: { ticks: { color: '#666', font: { size: 10 }, callback: v => formatGP(v) }, grid: { color: 'rgba(58,58,58,0.3)' } }
-      }
-    }
-  });
-}
-
-// ===========================
-// SECTION 11: GUIDES
-// ===========================
-
-const GUIDES = {
-  '101': `
-    <h2>Flipping 101</h2>
-    <p>Grand Exchange flipping is the art of buying items at a lower price and selling them for a profit. The GE is the central marketplace of Old School RuneScape — every item traded goes through it.</p>
-    <h3>How it works</h3>
-    <ul>
-      <li>Place a <strong>buy offer</strong> slightly above the current sell price to buy quickly</li>
-      <li>Wait for your item to be bought</li>
-      <li>Place a <strong>sell offer</strong> slightly below the current buy price to sell quickly</li>
-      <li>Collect your profit, minus the <strong>1% GE tax</strong> (capped at 5M GP)</li>
-    </ul>
-    <h3>Key Concepts</h3>
-    <ul>
-      <li><strong>Insta-buy price:</strong> The price at which your offer fills immediately (buy at the current offer price)</li>
-      <li><strong>Insta-sell price:</strong> The price at which your item sells immediately</li>
-      <li><strong>Margin:</strong> The difference between insta-buy and insta-sell prices</li>
-      <li><strong>GE Tax:</strong> 1% of the sell price, capped at 5,000,000 GP per item</li>
-      <li><strong>Buy Limit:</strong> Maximum quantity you can buy every 4 hours</li>
-    </ul>
-    <h3>Why it works</h3>
-    <p>Prices constantly fluctuate due to supply and demand. Flippers profit from this spread by acting as market makers — buying from sellers and selling to buyers.</p>
-  `,
-  'first': `
-    <h2>Your First Flip</h2>
-    <p>New to flipping? Here's a step-by-step guide to making your first profit.</p>
-    <h3>Step 1: Find an item to flip</h3>
-    <p>Open the <strong>Scanner</strong> tab and sort by <strong>After Tax</strong> margin. Look for items with:</p>
-    <ul>
-      <li>Margin after tax <strong>&gt; 500 GP</strong></li>
-      <li>Reasonable volume (the item actually trades)</li>
-      <li>A price you can afford (start small!)</li>
-    </ul>
-    <h3>Step 2: Check the margin in-game</h3>
-    <p>In-game, buy 1 of the item at a high price to find the insta-buy price. Then sell 1 at a low price to find the insta-sell price. This is called <strong>margin checking</strong>.</p>
-    <h3>Step 3: Place your orders</h3>
-    <ul>
-      <li>Buy order: insta-sell price + 1-5 GP</li>
-      <li>Sell order: insta-buy price - 1-5 GP</li>
-    </ul>
-    <h3>Step 4: Wait and collect</h3>
-    <p>Check back periodically. When both orders fill, collect your profit. Use this tracker to record your flips and analyze performance.</p>
-    <h3>Starting capital advice</h3>
-    <p>With <strong>under 100K GP</strong>: Focus on cheap, high-volume items like runes, arrows, and low-level food.</p>
-    <p>With <strong>1M+ GP</strong>: You can flip more expensive items with higher margins. The calculator tab can help estimate max profit at buy limits.</p>
-  `,
-  'limits': `
-    <h2>Buy Limits</h2>
-    <p>Every item in the GE has a <strong>buy limit</strong> — the maximum quantity you can buy in a 4-hour window.</p>
-    <h3>Why limits exist</h3>
-    <p>Jagex introduced buy limits to prevent market manipulation and ensure items remain accessible to all players. High-demand items tend to have lower limits to reduce hoarding.</p>
-    <h3>Working around limits</h3>
-    <ul>
-      <li>Use multiple accounts (must be legitimate accounts you own)</li>
-      <li>Rotate between different items</li>
-      <li>Flip items with higher limits for more volume</li>
-      <li>Time your offers around the 4-hour reset</li>
-    </ul>
-    <h3>Common buy limits</h3>
-    <ul>
-      <li><strong>Runes:</strong> 25,000 per 4h</li>
-      <li><strong>Arrows/bolts:</strong> 11,000 per 4h</li>
-      <li><strong>Food (lobsters, sharks):</strong> 1,500–3,000 per 4h</li>
-      <li><strong>Potions:</strong> 2,000 per 4h</li>
-      <li><strong>High-value items (whip, etc.):</strong> 8–70 per 4h</li>
-    </ul>
-    <p>The <strong>Calculator</strong> tab shows the buy limit for any item and calculates your <strong>Max Profit at Limit</strong> — the theoretical maximum profit per 4-hour window.</p>
-  `,
-  'advanced': `
-    <h2>Advanced Flipping Tips</h2>
-    <h3>High-alch flipping</h3>
-    <p>Some items can be bought on the GE and high-alched for profit. Check if the <strong>Alch value</strong> in the Scanner exceeds the buy price + nature rune cost (~200 GP).</p>
-    <h3>Merching vs. flipping</h3>
-    <p><strong>Flipping</strong> involves quick turnover — buy and sell the same day. <strong>Merching</strong> involves holding items longer, betting on price increases. This tracker is designed for active flipping.</p>
-    <h3>Margin squeezing</h3>
-    <p>To get the best price, undercut the competition by 1 GP. On buy orders, offer 1 GP above the current highest buyer. On sell orders, list 1 GP below the lowest seller.</p>
-    <h3>Volume flipping</h3>
-    <p>Some items have small margins but huge volume. Flipping 10,000 runes at 5 GP profit each = 50K GP in minutes. Use the <strong>High Volume</strong> filter in the Scanner.</p>
-    <h3>Reading price charts</h3>
-    <p>Click any item in the Scanner to open its detail modal and view the price chart. Look for:</p>
-    <ul>
-      <li><strong>Stable spreads:</strong> Consistent margin between buy/sell</li>
-      <li><strong>Trending items:</strong> Rising buy prices signal strong demand</li>
-      <li><strong>Volatile items:</strong> Large swings = higher risk but higher reward</li>
-    </ul>
-    <h3>Protecting yourself</h3>
-    <ul>
-      <li>Never flip items you can't afford to lose</li>
-      <li>Check volume before investing — low volume = slow sales</li>
-      <li>Be aware of update cycles — game updates can crash or spike item prices</li>
-    </ul>
-  `
-};
-
-function showGuide(key, btn) {
-  if (!GUIDES[key]) return;
-  document.getElementById('guide-content').innerHTML = GUIDES[key];
-  document.querySelectorAll('.guides-tabs .pill').forEach(p => p.classList.remove('active'));
-  if (btn) btn.classList.add('active');
-}
-
-// ===========================
-// SECTION 12: SETTINGS
-// ===========================
-
-function initSettings() {
-  document.getElementById('settings-name').value = appState.settings.displayName || '';
-  document.getElementById('settings-api-key').value = appState.settings.apiKey || '';
-}
-
-function updateSettingsName(val) {
-  appState.settings.displayName = val;
-}
-
-function generateApiKey() {
-  const key = 'osrs_' + Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b => b.toString(16).padStart(2, '0')).join('');
-  appState.settings.apiKey = key;
-  document.getElementById('settings-api-key').value = key;
-  showToast('API key generated', 'success');
-}
-
-function exportFlips() {
-  const data = JSON.stringify(appState.flips, null, 2);
-  const blob = new Blob([data], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'osrs-flips-' + new Date().toISOString().split('T')[0] + '.json';
-  a.click();
-  URL.revokeObjectURL(url);
-  showToast('Flips exported', 'success');
-}
-
-function clearAllData() {
-  if (!confirm('Are you sure? This will delete all your flips, watchlist, and settings.')) return;
-  appState.flips = [];
-  appState.watchlist = [];
-  appState.settings = { displayName: '', apiKey: '' };
-  appState.flipIdCounter = 1;
-  renderKanban();
-  renderStats();
-  renderWatchlist();
-  initSettings();
-  showToast('All data cleared', 'info');
-}
-
-// ===========================
-// SECTION 13: AUTH
-// ===========================
-
-let authMode = 'login';
-
-function openAuthModal() {
-  if (appState.currentUser) {
-    // Show logout option
-    if (confirm(`Logged in as "${appState.currentUser}". Log out?`)) {
-      appState.currentUser = null;
-      updateAuthUI();
-      showToast('Logged out', 'info');
-    }
-    return;
-  }
-  authMode = 'login';
-  document.getElementById('auth-modal-title').textContent = 'Login';
-  document.getElementById('auth-submit-btn').textContent = 'Login';
-  document.getElementById('auth-toggle-btn').textContent = 'Need an account? Register';
-  document.getElementById('auth-error').textContent = '';
-  document.getElementById('auth-username').value = '';
-  document.getElementById('auth-password').value = '';
-  document.getElementById('auth-modal').style.display = 'flex';
-  lucide.createIcons();
+  setTimeout(() => document.getElementById('auth-username').focus(), 50);
 }
 
 function closeAuthModal() {
   document.getElementById('auth-modal').style.display = 'none';
+  clearAuthError();
 }
 
-function toggleAuthMode() {
-  authMode = authMode === 'login' ? 'register' : 'login';
-  if (authMode === 'register') {
-    document.getElementById('auth-modal-title').textContent = 'Register';
-    document.getElementById('auth-submit-btn').textContent = 'Create Account';
-    document.getElementById('auth-toggle-btn').textContent = 'Already have an account? Login';
-  } else {
-    document.getElementById('auth-modal-title').textContent = 'Login';
-    document.getElementById('auth-submit-btn').textContent = 'Login';
-    document.getElementById('auth-toggle-btn').textContent = 'Need an account? Register';
-  }
-  document.getElementById('auth-error').textContent = '';
+function switchAuthMode() {
+  openAuthModal(authMode === 'login' ? 'register' : 'login');
+}
+
+function clearAuthError() {
+  const el = document.getElementById('auth-error');
+  el.textContent = '';
+  el.style.display = 'none';
+}
+
+function showAuthError(msg) {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg;
+  el.style.display = 'block';
 }
 
 function togglePasswordVisibility() {
   const input = document.getElementById('auth-password');
-  const btn = document.querySelector('.password-toggle i');
+  const icon  = document.getElementById('pw-eye-icon');
   if (input.type === 'password') {
     input.type = 'text';
-    btn.setAttribute('data-lucide', 'eye');
+    icon.setAttribute('data-lucide', 'eye-off');
   } else {
     input.type = 'password';
-    btn.setAttribute('data-lucide', 'eye-off');
+    icon.setAttribute('data-lucide', 'eye');
   }
   lucide.createIcons();
 }
 
-function handleAuthSubmit() {
+function submitAuth() {
   const username = document.getElementById('auth-username').value.trim();
   const password = document.getElementById('auth-password').value;
-  const errorEl = document.getElementById('auth-error');
+  if (!username) return showAuthError('Username is required.');
+  if (!password || password.length < 4) return showAuthError('Password must be at least 4 characters.');
 
-  if (!username || !password) {
-    errorEl.textContent = 'Please fill in all fields';
-    return;
-  }
-  if (username.length < 2) {
-    errorEl.textContent = 'Username must be at least 2 characters';
-    return;
-  }
-  if (password.length < 4) {
-    errorEl.textContent = 'Password must be at least 4 characters';
-    return;
-  }
-
+  // Simulated auth — in production, this would be an API call
   if (authMode === 'register') {
-    if (appState.users[username]) {
-      errorEl.textContent = 'Username already taken';
-      return;
-    }
-    // Simple hash (not secure, just demo)
-    appState.users[username] = { password };
-    appState.currentUser = username;
+    currentUser = { username, avatarLetter: username[0].toUpperCase() };
+    saveAuth();
     closeAuthModal();
-    updateAuthUI();
-    showToast('Account created! Welcome, ' + username, 'success');
+    updateUserUI();
+    showToast(`Welcome, ${username}!`, 'success');
   } else {
-    const user = appState.users[username];
-    if (!user || user.password !== password) {
-      errorEl.textContent = 'Invalid username or password';
-      return;
-    }
-    appState.currentUser = username;
+    // Simple login: accept any username/password (demo mode)
+    currentUser = { username, avatarLetter: username[0].toUpperCase() };
+    saveAuth();
     closeAuthModal();
-    updateAuthUI();
-    showToast('Welcome back, ' + username + '!', 'success');
+    updateUserUI();
+    showToast(`Welcome back, ${username}!`, 'success');
   }
 }
 
-function continueAsGuest() {
-  closeAuthModal();
-  showToast('Continuing as guest', 'info');
-}
-
-function updateAuthUI() {
-  const btn = document.getElementById('auth-btn');
-  const label = document.getElementById('auth-btn-label');
-  if (appState.currentUser) {
-    label.textContent = appState.currentUser;
+function handleAuthBtn() {
+  if (currentUser) {
+    // Logout
+    currentUser = null;
+    saveAuth();
+    updateUserUI();
+    showToast('Logged out.', 'info');
   } else {
-    label.textContent = 'Login';
+    openAuthModal('login');
   }
 }
 
-// ===========================
-// SECTION 14: SIDEBAR & MOBILE
-// ===========================
+function updateUserUI() {
+  const usernameEl = document.getElementById('sidebar-username');
+  const avatarEl   = document.getElementById('sidebar-avatar');
+  const authIcon   = document.getElementById('sidebar-auth-icon');
+  const authBtn    = document.getElementById('sidebar-auth-btn');
+
+  if (currentUser) {
+    usernameEl.textContent = currentUser.username;
+    avatarEl.textContent   = currentUser.avatarLetter || currentUser.username[0].toUpperCase();
+    authIcon.setAttribute('data-lucide', 'log-out');
+    authBtn.title = 'Logout';
+  } else {
+    usernameEl.textContent = 'Guest';
+    avatarEl.textContent   = 'G';
+    authIcon.setAttribute('data-lucide', 'log-in');
+    authBtn.title = 'Login';
+  }
+  lucide.createIcons();
+}
+
+/* ==========================================================================
+   Session Timer
+========================================================================== */
+function startSessionTimer() {
+  sessionStart = Date.now();
+  updateTimerDisplay();
+  timerInterval = setInterval(updateTimerDisplay, 1000);
+}
+
+function updateTimerDisplay() {
+  const elapsed = Math.floor((Date.now() - sessionStart) / 1000);
+  const h = String(Math.floor(elapsed / 3600)).padStart(2, '0');
+  const m = String(Math.floor((elapsed % 3600) / 60)).padStart(2, '0');
+  const s = String(elapsed % 60).padStart(2, '0');
+  const el = document.getElementById('timer-display');
+  if (el) el.textContent = `${h}:${m}:${s}`;
+}
+
+/* ==========================================================================
+   Navigation
+========================================================================== */
+function navigateTo(section) {
+  document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+
+  const sectionEl = document.getElementById(`section-${section}`);
+  if (sectionEl) sectionEl.classList.add('active');
+
+  const navEl = document.querySelector(`.nav-item[data-section="${section}"]`);
+  if (navEl) navEl.classList.add('active');
+
+  const titles = { dashboard: 'Dashboard', flips: 'My Flips', analytics: 'Analytics', calculator: 'Calculator' };
+  document.getElementById('page-title').textContent = titles[section] || section;
+
+  if (section === 'dashboard') {
+    renderDashboard();
+  } else if (section === 'flips') {
+    renderFlipsList();
+  } else if (section === 'analytics') {
+    renderAnalytics();
+  } else if (section === 'calculator') {
+    // nothing extra needed
+  }
+
+  // Close sidebar on mobile
+  if (window.innerWidth < 768) {
+    document.getElementById('sidebar').classList.remove('open');
+  }
+}
 
 function toggleSidebar() {
   document.getElementById('sidebar').classList.toggle('open');
 }
 
-// Close modal on overlay click
-document.querySelectorAll('.modal-overlay').forEach(overlay => {
-  overlay.addEventListener('click', function (e) {
-    if (e.target === this) {
-      this.style.display = 'none';
-      if (appState.itemChart && this.id === 'item-modal') {
-        appState.itemChart.destroy();
-        appState.itemChart = null;
+/* ==========================================================================
+   Modal — Add / Edit Flip
+========================================================================== */
+function openModal(id = null) {
+  editingId = id;
+  const modal = document.getElementById('flip-modal');
+  const title = document.getElementById('modal-title');
+  const saveBtn = document.getElementById('save-flip-btn');
+
+  if (id) {
+    const flip = flips.find(f => f.id === id);
+    if (!flip) return;
+    title.textContent = 'Edit Flip';
+    saveBtn.textContent = 'Update Flip';
+    document.getElementById('item-name').value  = flip.item;
+    document.getElementById('buy-price').value  = flip.buyPrice;
+    document.getElementById('sell-price').value = flip.sellPrice;
+    document.getElementById('quantity').value   = flip.quantity;
+    document.getElementById('flip-date').value  = flip.date;
+    document.getElementById('flip-notes').value = flip.notes || '';
+  } else {
+    title.textContent = 'Add Flip';
+    saveBtn.textContent = 'Save Flip';
+    document.getElementById('item-name').value  = '';
+    document.getElementById('buy-price').value  = '';
+    document.getElementById('sell-price').value = '';
+    document.getElementById('quantity').value   = '1';
+    document.getElementById('flip-date').value  = today();
+    document.getElementById('flip-notes').value = '';
+  }
+  document.getElementById('modal-preview').style.display = 'none';
+  modal.style.display = 'flex';
+  setTimeout(() => document.getElementById('item-name').focus(), 50);
+  updateModalPreview();
+}
+
+function closeModal() {
+  document.getElementById('flip-modal').style.display = 'none';
+  editingId = null;
+}
+
+function updateModalPreview() {
+  const buy  = parseFloat(document.getElementById('buy-price').value)  || 0;
+  const sell = parseFloat(document.getElementById('sell-price').value) || 0;
+  const qty  = parseInt(document.getElementById('quantity').value)     || 1;
+
+  if (buy > 0 && sell > 0) {
+    const tax        = Math.floor(sell * GE_TAX_RATE);
+    const profitPer  = sell - buy - tax;
+    const profitTotal = profitPer * qty;
+    const roi        = ((profitPer / buy) * 100).toFixed(2);
+
+    document.getElementById('preview-profit-per').textContent   = formatGP(profitPer);
+    document.getElementById('preview-profit-total').textContent = formatGP(profitTotal);
+    document.getElementById('preview-roi').textContent          = `${roi}%`;
+    document.getElementById('modal-preview').style.display = 'block';
+  } else {
+    document.getElementById('modal-preview').style.display = 'none';
+  }
+}
+
+function saveFlip() {
+  const item      = document.getElementById('item-name').value.trim();
+  const buyPrice  = parseFloat(document.getElementById('buy-price').value);
+  const sellPrice = parseFloat(document.getElementById('sell-price').value);
+  const quantity  = parseInt(document.getElementById('quantity').value) || 1;
+  const date      = document.getElementById('flip-date').value || today();
+  const notes     = document.getElementById('flip-notes').value.trim();
+
+  if (!item)           return showToast('Item name is required.', 'error');
+  if (isNaN(buyPrice)) return showToast('Buy price is required.', 'error');
+  if (isNaN(sellPrice))return showToast('Sell price is required.', 'error');
+
+  const tax        = Math.floor(sellPrice * GE_TAX_RATE);
+  const profitPer  = sellPrice - buyPrice - tax;
+  const profitTotal = profitPer * quantity;
+  const roi        = buyPrice > 0 ? ((profitPer / buyPrice) * 100) : 0;
+
+  if (editingId) {
+    const idx = flips.findIndex(f => f.id === editingId);
+    if (idx !== -1) {
+      flips[idx] = { ...flips[idx], item, buyPrice, sellPrice, quantity, date, notes, profitPer, profitTotal, roi, tax };
+    }
+    showToast('Flip updated!', 'success');
+  } else {
+    const flip = {
+      id: genId(), item, buyPrice, sellPrice, quantity, date, notes,
+      profitPer, profitTotal, roi, tax,
+      createdAt: new Date().toISOString()
+    };
+    flips.unshift(flip);
+    showToast('Flip added!', 'success');
+  }
+
+  saveData();
+  closeModal();
+  refreshAll();
+}
+
+/* ==========================================================================
+   Delete Modal
+========================================================================== */
+function openDeleteModal(id) {
+  deleteId = id;
+  const flip = flips.find(f => f.id === id);
+  document.getElementById('delete-item-name').textContent = flip ? flip.item : 'this item';
+  document.getElementById('delete-modal').style.display = 'flex';
+}
+
+function closeDeleteModal() {
+  document.getElementById('delete-modal').style.display = 'none';
+  deleteId = null;
+}
+
+function confirmDelete() {
+  if (!deleteId) return;
+  flips = flips.filter(f => f.id !== deleteId);
+  saveData();
+  closeDeleteModal();
+  showToast('Flip deleted.', 'info');
+  refreshAll();
+}
+
+/* ==========================================================================
+   Calculator Modal
+========================================================================== */
+function openCalcModal() {
+  document.getElementById('calc-modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('calc-buy').focus(), 50);
+}
+
+function closeCalcModal() {
+  document.getElementById('calc-modal').style.display = 'none';
+}
+
+function updateCalc() {
+  const buy  = parseFloat(document.getElementById('calc-buy').value)  || 0;
+  const sell = parseFloat(document.getElementById('calc-sell').value) || 0;
+  const qty  = parseInt(document.getElementById('calc-qty').value)    || 1;
+  const taxPct = parseFloat(document.getElementById('calc-tax').value) / 100 || GE_TAX_RATE;
+
+  const revenue   = sell * qty;
+  const cost      = buy * qty;
+  const taxAmt    = Math.floor(sell * taxPct) * qty;
+  const netProfit = revenue - cost - taxAmt;
+  const roi       = cost > 0 ? ((netProfit / cost) * 100).toFixed(2) : '0.00';
+
+  document.getElementById('calc-profit-display').textContent = formatGP(netProfit);
+  document.getElementById('calc-roi-display').textContent    = `ROI: ${roi}%`;
+  document.getElementById('calc-revenue').textContent  = formatGP(revenue);
+  document.getElementById('calc-cost').textContent     = formatGP(cost);
+  document.getElementById('calc-tax-amount').textContent = formatGP(taxAmt);
+  document.getElementById('calc-net').textContent      = formatGP(netProfit);
+}
+
+function useCalcValues() {
+  const buy  = document.getElementById('calc-buy').value;
+  const sell = document.getElementById('calc-sell').value;
+  const qty  = document.getElementById('calc-qty').value;
+  closeCalcModal();
+  openModal();
+  document.getElementById('buy-price').value  = buy;
+  document.getElementById('sell-price').value = sell;
+  document.getElementById('quantity').value   = qty;
+  updateModalPreview();
+}
+
+/* ==========================================================================
+   Calculator Page
+========================================================================== */
+function updatePageCalc() {
+  const buy  = parseFloat(document.getElementById('calc-page-buy').value)  || 0;
+  const sell = parseFloat(document.getElementById('calc-page-sell').value) || 0;
+  const qty  = parseInt(document.getElementById('calc-page-qty').value)    || 1;
+  const taxPct = parseFloat(document.getElementById('calc-page-tax').value) / 100 || GE_TAX_RATE;
+
+  const revenue   = sell * qty;
+  const cost      = buy * qty;
+  const taxAmt    = Math.floor(sell * taxPct) * qty;
+  const netProfit = revenue - cost - taxAmt;
+  const roi       = cost > 0 ? ((netProfit / cost) * 100).toFixed(2) : '0.00';
+
+  document.getElementById('calc-page-profit-display').textContent = formatGP(netProfit);
+  document.getElementById('calc-page-roi-display').textContent    = `ROI: ${roi}%`;
+  document.getElementById('calc-page-revenue').textContent  = formatGP(revenue);
+  document.getElementById('calc-page-cost').textContent     = formatGP(cost);
+  document.getElementById('calc-page-tax-amount').textContent = formatGP(taxAmt);
+  document.getElementById('calc-page-net').textContent      = formatGP(netProfit);
+}
+
+function usePageCalcValues() {
+  const buy  = document.getElementById('calc-page-buy').value;
+  const sell = document.getElementById('calc-page-sell').value;
+  const qty  = document.getElementById('calc-page-qty').value;
+  navigateTo('flips');
+  openModal();
+  document.getElementById('buy-price').value  = buy;
+  document.getElementById('sell-price').value = sell;
+  document.getElementById('quantity').value   = qty;
+  updateModalPreview();
+}
+
+/* ==========================================================================
+   Export / Import
+========================================================================== */
+function exportFlips() {
+  if (!flips.length) return showToast('No flips to export.', 'error');
+  const blob = new Blob([JSON.stringify({ version: 2, exportedAt: new Date().toISOString(), flips }, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `osrs-flips-${today()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Flips exported!', 'success');
+}
+
+function importFlips(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      const imported = Array.isArray(data) ? data : (Array.isArray(data.flips) ? data.flips : null);
+      if (!imported) return showToast('Invalid file format.', 'error');
+      const newFlips = imported.filter(f => f.id && f.item);
+      let added = 0;
+      for (const flip of newFlips) {
+        if (!flips.find(f => f.id === flip.id)) {
+          flips.unshift(flip);
+          added++;
+        }
+      }
+      saveData();
+      refreshAll();
+      showToast(`Imported ${added} flip(s).`, 'success');
+    } catch (err) {
+      showToast('Failed to parse file.', 'error');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+/* ==========================================================================
+   Dashboard
+========================================================================== */
+function renderDashboard() {
+  renderStats();
+  renderProfitChart();
+  renderTopItems();
+  renderRecentFlips();
+}
+
+function renderStats() {
+  const grid = document.getElementById('stats-grid');
+  const totalProfit = flips.reduce((s, f) => s + (f.profitTotal || 0), 0);
+  const totalFlips  = flips.length;
+  const avgRoi      = flips.length ? (flips.reduce((s, f) => s + (f.roi || 0), 0) / flips.length).toFixed(1) : '0.0';
+  const bestFlip    = flips.length ? flips.reduce((a, b) => (a.profitTotal > b.profitTotal ? a : b)) : null;
+
+  grid.innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">Total Profit</div>
+      <div class="stat-value ${totalProfit >= 0 ? 'profit' : 'loss'}">${formatGP(totalProfit)}</div>
+      <div class="stat-sub">${totalFlips} flip${totalFlips !== 1 ? 's' : ''} tracked</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Avg ROI</div>
+      <div class="stat-value">${avgRoi}%</div>
+      <div class="stat-sub">Across all flips</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Best Flip</div>
+      <div class="stat-value">${bestFlip ? formatGP(bestFlip.profitTotal) : '—'}</div>
+      <div class="stat-sub">${bestFlip ? bestFlip.item : 'No flips yet'}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Volume</div>
+      <div class="stat-value">${formatGP(flips.reduce((s, f) => s + (f.buyPrice * f.quantity || 0), 0))}</div>
+      <div class="stat-sub">GP invested</div>
+    </div>
+  `;
+}
+
+function renderProfitChart() {
+  const canvas = document.getElementById('profit-chart');
+  const ctx = canvas.getContext('2d');
+  const data = getChartData(chartRange);
+
+  if (profitChart) profitChart.destroy();
+  profitChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.labels,
+      datasets: [{
+        label: 'Profit',
+        data: data.values,
+        borderColor: '#ff981f',
+        backgroundColor: 'rgba(255,152,31,0.08)',
+        borderWidth: 2,
+        fill: true,
+        tension: 0.4,
+        pointBackgroundColor: '#ff981f',
+        pointRadius: 4,
+        pointHoverRadius: 6
+      }]
+    },
+    options: chartOptions('GP')
+  });
+}
+
+function setChartRange(range) {
+  chartRange = range;
+  document.querySelectorAll('.chart-controls .chip').forEach(c => {
+    c.classList.toggle('active', c.dataset.range === range);
+  });
+  renderProfitChart();
+}
+
+function getChartData(range) {
+  const now   = new Date();
+  const days  = range === '7d' ? 7 : range === '30d' ? 30 : 90;
+  const labels = [];
+  const values = [];
+
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().slice(0, 10);
+    labels.push(range === 'all' ? dateStr : dateStr.slice(5));
+    const dayProfit = flips
+      .filter(f => f.date === dateStr)
+      .reduce((s, f) => s + (f.profitTotal || 0), 0);
+    values.push(dayProfit);
+  }
+  return { labels, values };
+}
+
+function renderTopItems() {
+  const list = document.getElementById('top-items-list');
+  const itemMap = {};
+  for (const f of flips) {
+    if (!itemMap[f.item]) itemMap[f.item] = 0;
+    itemMap[f.item] += f.profitTotal || 0;
+  }
+  const sorted = Object.entries(itemMap).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  if (!sorted.length) {
+    list.innerHTML = '<div class="top-item" style="color:var(--text-muted);font-size:13px;">No flips yet.</div>';
+    return;
+  }
+  list.innerHTML = sorted.map(([name, profit]) => `
+    <div class="top-item">
+      <span class="top-item-name">${escHtml(name)}</span>
+      <span class="top-item-profit ${profit < 0 ? 'neg' : ''}">${formatGP(profit)}</span>
+    </div>
+  `).join('');
+}
+
+function renderRecentFlips() {
+  const list = document.getElementById('recent-flips-list');
+  const recent = [...flips].slice(0, 8);
+  if (!recent.length) {
+    list.innerHTML = '<div style="padding:16px 20px;color:var(--text-muted);font-size:13px;">No flips yet.</div>';
+    return;
+  }
+  list.innerHTML = recent.map(f => `
+    <div class="recent-flip-row">
+      <div>
+        <div class="recent-flip-name">${escHtml(f.item)}</div>
+        <div class="recent-flip-date">${formatDate(f.date)} &middot; x${f.quantity}</div>
+      </div>
+      <span class="badge ${f.profitTotal >= 0 ? 'badge-profit' : 'badge-loss'}">${f.roi ? f.roi.toFixed(1) + '%' : '0%'} ROI</span>
+      <span class="recent-flip-profit ${f.profitTotal >= 0 ? 'pos' : 'neg'}">${formatGP(f.profitTotal)}</span>
+    </div>
+  `).join('');
+}
+
+/* ==========================================================================
+   My Flips
+========================================================================== */
+function filterFlips() {
+  const query  = document.getElementById('search-input').value.toLowerCase();
+  const sort   = document.getElementById('sort-select').value;
+  const filter = document.getElementById('filter-select').value;
+
+  let list = [...flips];
+
+  // Filter by time
+  if (filter !== 'all') {
+    const now = new Date();
+    list = list.filter(f => {
+      const d = new Date(f.date);
+      if (filter === 'today') return f.date === today();
+      if (filter === 'week')  return (now - d) <= 7  * 86400000;
+      if (filter === 'month') return (now - d) <= 30 * 86400000;
+      return true;
+    });
+  }
+
+  // Search
+  if (query) list = list.filter(f => f.item.toLowerCase().includes(query) || (f.notes || '').toLowerCase().includes(query));
+
+  // Sort
+  list.sort((a, b) => {
+    if (sort === 'date-desc')   return new Date(b.date) - new Date(a.date);
+    if (sort === 'date-asc')    return new Date(a.date) - new Date(b.date);
+    if (sort === 'profit-desc') return b.profitTotal - a.profitTotal;
+    if (sort === 'profit-asc')  return a.profitTotal - b.profitTotal;
+    if (sort === 'roi-desc')    return b.roi - a.roi;
+    return 0;
+  });
+
+  renderFlipsListWith(list);
+}
+
+function renderFlipsList() {
+  filterFlips();
+}
+
+function renderFlipsListWith(list) {
+  const container  = document.getElementById('flips-list');
+  const emptyState = document.getElementById('flips-empty');
+
+  if (!list.length) {
+    container.innerHTML  = '';
+    emptyState.style.display = 'flex';
+    return;
+  }
+  emptyState.style.display = 'none';
+  container.innerHTML = list.map(f => `
+    <div class="flip-card" tabindex="0" onclick="openModal('${f.id}')" onkeydown="if(event.key==='Enter'||event.key===' ')openModal('${f.id}')" role="button" aria-label="Edit ${escHtml(f.item)} flip">
+      <div class="flip-card-left">
+        <div class="flip-item-name">${escHtml(f.item)}</div>
+        <div class="flip-meta">
+          <span class="flip-meta-item">Buy: <span>${formatGP(f.buyPrice)}</span></span>
+          <span class="flip-meta-item">Sell: <span>${formatGP(f.sellPrice)}</span></span>
+          <span class="flip-meta-item">Qty: <span>${f.quantity}</span></span>
+          <span class="flip-meta-item">Date: <span>${formatDate(f.date)}</span></span>
+          ${f.notes ? `<span class="flip-meta-item">Note: <span>${escHtml(f.notes)}</span></span>` : ''}
+        </div>
+      </div>
+      <div class="flip-card-right">
+        <div class="flip-profit ${f.profitTotal >= 0 ? 'pos' : 'neg'}">${formatGP(f.profitTotal)}</div>
+        <div class="flip-roi">${f.roi ? f.roi.toFixed(2) : '0.00'}% ROI</div>
+        <div class="flip-actions" onclick="event.stopPropagation()">
+          <button class="icon-btn" onclick="openModal('${f.id}')" title="Edit"><i data-lucide="pencil"></i></button>
+          <button class="icon-btn" onclick="openDeleteModal('${f.id}')" title="Delete" style="color:var(--loss)"><i data-lucide="trash-2"></i></button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+  lucide.createIcons();
+}
+
+/* ==========================================================================
+   Analytics
+========================================================================== */
+function renderAnalytics() {
+  renderDailyChart();
+  renderItemChart();
+  renderRoiChart();
+  renderAlltimeStats();
+}
+
+function renderDailyChart() {
+  const ctx = document.getElementById('daily-chart').getContext('2d');
+  const data = getChartData('30d');
+  if (dailyChart) dailyChart.destroy();
+  dailyChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: data.labels,
+      datasets: [{
+        label: 'Daily Profit',
+        data: data.values,
+        backgroundColor: data.values.map(v => v >= 0 ? 'rgba(74,222,128,0.7)' : 'rgba(248,113,113,0.7)'),
+        borderRadius: 4
+      }]
+    },
+    options: chartOptions('GP')
+  });
+}
+
+function renderItemChart() {
+  const ctx = document.getElementById('item-chart').getContext('2d');
+  const itemMap = {};
+  for (const f of flips) {
+    if (!itemMap[f.item]) itemMap[f.item] = 0;
+    itemMap[f.item] += f.profitTotal || 0;
+  }
+  const sorted  = Object.entries(itemMap).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const labels  = sorted.map(([name]) => name);
+  const values  = sorted.map(([, v]) => v);
+  const colors  = [
+    '#ff981f','#4ade80','#60a5fa','#f472b6',
+    '#a78bfa','#34d399','#fbbf24','#f87171'
+  ];
+  if (itemChart) itemChart.destroy();
+  itemChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{ data: values, backgroundColor: colors, borderWidth: 0 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'right', labels: { color: '#9aa0b4', font: { size: 12 } } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${formatGP(ctx.raw)}` } }
       }
     }
   });
+}
+
+function renderRoiChart() {
+  const ctx = document.getElementById('roi-chart').getContext('2d');
+  const buckets = { '<0%': 0, '0–5%': 0, '5–10%': 0, '10–20%': 0, '>20%': 0 };
+  for (const f of flips) {
+    const r = f.roi || 0;
+    if (r < 0) buckets['<0%']++;
+    else if (r < 5)  buckets['0–5%']++;
+    else if (r < 10) buckets['5–10%']++;
+    else if (r < 20) buckets['10–20%']++;
+    else buckets['>20%']++;
+  }
+  if (roiChart) roiChart.destroy();
+  roiChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: Object.keys(buckets),
+      datasets: [{
+        label: 'Flips',
+        data: Object.values(buckets),
+        backgroundColor: ['#f87171','#fbbf24','#4ade80','#34d399','#60a5fa'],
+        borderRadius: 4
+      }]
+    },
+    options: chartOptions('')
+  });
+}
+
+function renderAlltimeStats() {
+  const el = document.getElementById('alltime-stats');
+  if (!flips.length) {
+    el.innerHTML = '<div class="alltime-row"><span class="alltime-label">No flips yet.</span></div>';
+    return;
+  }
+  const totalProfit  = flips.reduce((s, f) => s + (f.profitTotal || 0), 0);
+  const totalVolume  = flips.reduce((s, f) => s + (f.buyPrice * f.quantity || 0), 0);
+  const avgProfit    = totalProfit / flips.length;
+  const bestFlip     = flips.reduce((a, b) => a.profitTotal > b.profitTotal ? a : b);
+  const worstFlip    = flips.reduce((a, b) => a.profitTotal < b.profitTotal ? a : b);
+  const profitableCount = flips.filter(f => f.profitTotal > 0).length;
+  const winRate         = ((profitableCount / flips.length) * 100).toFixed(1);
+  const rows = [
+    ['Total Profit',      formatGP(totalProfit)],
+    ['Total Volume',      formatGP(totalVolume)],
+    ['Avg Profit/Flip',   formatGP(avgProfit)],
+    ['Win Rate',          `${winRate}%`],
+    ['Total Flips',       flips.length],
+    ['Best Flip',         `${escHtml(bestFlip.item)} (${formatGP(bestFlip.profitTotal)})`],
+    ['Worst Flip',        `${escHtml(worstFlip.item)} (${formatGP(worstFlip.profitTotal)})`],
+  ];
+  el.innerHTML = rows.map(([label, value]) => `
+    <div class="alltime-row">
+      <span class="alltime-label">${label}</span>
+      <span class="alltime-value">${value}</span>
+    </div>
+  `).join('');
+}
+
+/* ==========================================================================
+   Helpers
+========================================================================== */
+function chartOptions(yUnit) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: ctx => yUnit ? ` ${formatGP(ctx.raw)}` : ` ${ctx.raw}`
+        }
+      }
+    },
+    scales: {
+      x: { ticks: { color: '#5c6278', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.03)' } },
+      y: { ticks: { color: '#5c6278', font: { size: 11 }, callback: v => yUnit ? formatGPShort(v) : v }, grid: { color: 'rgba(255,255,255,0.05)' } }
+    }
+  };
+}
+
+function formatGP(n) {
+  if (n === undefined || n === null) return '0 GP';
+  const abs = Math.abs(n);
+  let str;
+  if (abs >= 1e9)      str = (n / 1e9).toFixed(2) + 'B';
+  else if (abs >= 1e6) str = (n / 1e6).toFixed(2) + 'M';
+  else if (abs >= 1e3) str = (n / 1e3).toFixed(1) + 'K';
+  else                 str = Math.round(n).toLocaleString();
+  return str + ' GP';
+}
+
+function formatGPShort(n) {
+  if (!n) return '0';
+  if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(0) + 'K';
+  return Math.round(n);
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function genId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ---------- Toast ---------- */
+function showToast(msg, type = 'info') {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.className = `toast show ${type}`;
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => { toast.classList.remove('show'); }, 3000);
+}
+
+/* ---------- Refresh All ---------- */
+function refreshAll() {
+  const active = document.querySelector('.content-section.active');
+  if (!active) return;
+  const section = active.id.replace('section-', '');
+  navigateTo(section);
+}
+
+/* ==========================================================================
+   Keyboard Navigation
+========================================================================== */
+document.addEventListener('keydown', (e) => {
+  // Escape closes any open modal
+  if (e.key === 'Escape') {
+    if (document.getElementById('flip-modal').style.display !== 'none') closeModal();
+    else if (document.getElementById('delete-modal').style.display !== 'none') closeDeleteModal();
+    else if (document.getElementById('calc-modal').style.display !== 'none') closeCalcModal();
+    else if (document.getElementById('auth-modal').style.display !== 'none') closeAuthModal();
+    return;
+  }
+  // Alt+N = new flip
+  if (e.altKey && e.key === 'n') { e.preventDefault(); openModal(); }
+  // Alt+C = calculator
+  if (e.altKey && e.key === 'c') { e.preventDefault(); openCalcModal(); }
 });
 
-// ===========================
-// SECTION 15: SESSION TIMER
-// ===========================
+/* ========= Modal input listeners for live preview ========= */
+['buy-price','sell-price','quantity'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', updateModalPreview);
+});
 
-function startSessionTimer() {
-  appState.sessionTimer = setInterval(() => {
-    const el = document.getElementById('kpi-session');
-    if (el) {
-      el.innerHTML = '<span class="session-live-dot"></span>' + formatDuration(Date.now() - appState.sessionStart);
-    }
-  }, 1000);
-}
-
-// ===========================
-// SECTION 16: INIT
-// ===========================
-
-async function init() {
-  // Show scanner loading state immediately
-  document.getElementById('scanner-loading').style.display = 'flex';
-
-  // Load data
-  await loadMapping();
-  await loadPrices();
-
-  // Route to current page
-  route();
-
-  // Set up auto-refresh every 60s
-  appState.refreshTimer = setInterval(async () => {
-    await loadPrices();
-    // Re-render current page
-    const hash = (location.hash || '#scanner').slice(1);
-    if (hash === 'scanner') renderScanner();
-    if (hash === 'watchlist') renderWatchlist();
-  }, 60000);
-
-  // Update timer display every second
-  appState.updateTimerInterval = setInterval(updateTimerDisplay, 1000);
-
-  // Start session timer
+/* ==========================================================================
+   Init
+========================================================================== */
+document.addEventListener('DOMContentLoaded', () => {
+  loadData();
+  loadAuth();
+  updateUserUI();
   startSessionTimer();
-}
-
-init();
+  lucide.createIcons();
+  navigateTo('dashboard');
+});
