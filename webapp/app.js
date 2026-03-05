@@ -4,7 +4,7 @@
   "use strict";
 
   // ========== STATE ==========
-  const state = {
+  var state = {
     items: [],          // mapping data [{id, name, icon, examine, members, lowalch, highalch, limit, value}]
     itemMap: {},        // id -> item
     prices: {},         // id -> {high, highTime, low, lowTime}
@@ -48,24 +48,31 @@
     detailChart: null,
     profitChart: null,
     calcSelectedItem: null,
-    editingPostId: null
+    editingPostId: null,
+    // New state for feed system
+    smartFlips: [],
+    randomFlips: [],
+    flipHistory: [],
+    cardsTab: "smart",
+    skippedItems: {},
+    dataLoaded: false
   };
 
-  const LEVEL_NAMES = {
+  var LEVEL_NAMES = {
     1: "Novice", 5: "Apprentice", 10: "Journeyman", 15: "Expert",
     20: "Master", 25: "Grandmaster"
   };
 
-  const API_BASE = "https://prices.runescape.wiki/api/v1/osrs";
-  const HEADERS = { "User-Agent": "osrs-flip-tracker - @VibeGoette on GitHub" };
-  const WIKI_ICON_BASE = "https://oldschool.runescape.wiki/images/";
-  const ITEMS_PER_PAGE = 200;
+  var API_BASE = "https://prices.runescape.wiki/api/v1/osrs";
+  var HEADERS = { "User-Agent": "osrs-flip-tracker - @VibeGoette on GitHub" };
+  var WIKI_ICON_BASE = "https://oldschool.runescape.wiki/images/";
+  var ITEMS_PER_PAGE = 200;
 
   // ========== HELPERS ==========
   function formatGP(n) {
     if (n == null || isNaN(n)) return "—";
-    const abs = Math.abs(n);
-    const sign = n < 0 ? "-" : "";
+    var abs = Math.abs(n);
+    var sign = n < 0 ? "-" : "";
     if (abs >= 1e9) return sign + (abs / 1e9).toFixed(1) + "B";
     if (abs >= 1e6) return sign + (abs / 1e6).toFixed(1) + "M";
     if (abs >= 1e3) return sign + (abs / 1e3).toFixed(1) + "K";
@@ -87,10 +94,10 @@
   }
 
   function getLevelName(level) {
-    let name = "Novice";
-    const keys = Object.keys(LEVEL_NAMES).map(Number).sort((a, b) => a - b);
-    for (const k of keys) {
-      if (level >= k) name = LEVEL_NAMES[k];
+    var name = "Novice";
+    var keys = Object.keys(LEVEL_NAMES).map(Number).sort(function (a, b) { return a - b; });
+    for (var i = 0; i < keys.length; i++) {
+      if (level >= keys[i]) name = LEVEL_NAMES[keys[i]];
     }
     return name;
   }
@@ -109,21 +116,21 @@
 
   function formatTime(ms) {
     if (ms <= 0) return "00:00:00";
-    const totalSec = Math.floor(ms / 1000);
-    const h = Math.floor(totalSec / 3600);
-    const m = Math.floor((totalSec % 3600) / 60);
-    const s = totalSec % 60;
-    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    var totalSec = Math.floor(ms / 1000);
+    var h = Math.floor(totalSec / 3600);
+    var m = Math.floor((totalSec % 3600) / 60);
+    var s = totalSec % 60;
+    return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
   }
 
   function formatTimeShort(ms) {
     if (ms <= 0) return "0s";
-    const totalSec = Math.floor(ms / 1000);
+    var totalSec = Math.floor(ms / 1000);
     if (totalSec < 60) return totalSec + "s";
-    const m = Math.floor(totalSec / 60);
-    const s = totalSec % 60;
+    var m = Math.floor(totalSec / 60);
+    var s = totalSec % 60;
     if (m < 60) return m + "m " + s + "s";
-    const h = Math.floor(m / 60);
+    var h = Math.floor(m / 60);
     return h + "h " + (m % 60) + "m";
   }
 
@@ -131,29 +138,38 @@
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   }
 
+  function formatTimestamp(ts) {
+    var d = new Date(ts);
+    var month = String(d.getMonth() + 1).padStart(2, "0");
+    var day = String(d.getDate()).padStart(2, "0");
+    var hours = String(d.getHours()).padStart(2, "0");
+    var mins = String(d.getMinutes()).padStart(2, "0");
+    return d.getFullYear() + "-" + month + "-" + day + " " + hours + ":" + mins;
+  }
+
   // ========== TOAST ==========
   function showToast(msg, type, duration) {
     type = type || "";
     duration = duration || 3000;
-    const container = document.getElementById("toastContainer");
-    const toast = document.createElement("div");
+    var container = document.getElementById("toastContainer");
+    var toast = document.createElement("div");
     toast.className = "toast " + type;
     toast.textContent = msg;
     container.appendChild(toast);
-    setTimeout(() => {
+    setTimeout(function () {
       toast.style.opacity = "0";
       toast.style.transform = "translateX(40px)";
       toast.style.transition = "all 0.3s ease";
-      setTimeout(() => toast.remove(), 300);
+      setTimeout(function () { toast.remove(); }, 300);
     }, duration);
   }
 
   // ========== ALARM SOUND ==========
   function playAlarmSound() {
     try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
+      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.frequency.setValueAtTime(830, ctx.currentTime);
@@ -169,7 +185,7 @@
   // ========== MARKDOWN RENDERER ==========
   function renderMarkdown(md) {
     if (!md) return "";
-    let html = md;
+    var html = md;
     // Code blocks
     html = html.replace(/```([\s\S]*?)```/g, function (m, code) {
       return "<pre><code>" + code.replace(/</g, "&lt;").replace(/>/g, "&gt;") + "</code></pre>";
@@ -204,61 +220,181 @@
   }
 
   // ========== API ==========
-  async function apiFetch(endpoint) {
-    try {
-      const res = await fetch(API_BASE + endpoint, {
-        headers: HEADERS
-      });
+  function apiFetch(endpoint) {
+    return fetch(API_BASE + endpoint, {
+      headers: HEADERS
+    }).then(function (res) {
       if (!res.ok) throw new Error("API error: " + res.status);
-      return await res.json();
-    } catch (e) {
+      return res.json();
+    }).catch(function (e) {
       console.error("API fetch failed:", endpoint, e);
       return null;
-    }
+    });
   }
 
-  async function loadMapping() {
-    const data = await apiFetch("/mapping");
-    if (data) {
-      state.items = data;
-      state.itemMap = {};
-      for (const item of data) {
-        state.itemMap[item.id] = item;
+  function loadMapping() {
+    return apiFetch("/mapping").then(function (data) {
+      if (data) {
+        state.items = data;
+        state.itemMap = {};
+        for (var i = 0; i < data.length; i++) {
+          state.itemMap[data[i].id] = data[i];
+        }
+      }
+    });
+  }
+
+  function loadPrices() {
+    return apiFetch("/latest").then(function (data) {
+      if (data && data.data) {
+        state.prices = data.data;
+      }
+    });
+  }
+
+  function loadHourData() {
+    return apiFetch("/1h").then(function (data) {
+      if (data && data.data) {
+        state.hourData = data.data;
+      }
+    });
+  }
+
+  function loadTimeseries(itemId, timestep) {
+    timestep = timestep || "5m";
+    return apiFetch("/timeseries?id=" + itemId + "&timestep=" + timestep).then(function (data) {
+      if (data && data.data) return data.data;
+      return [];
+    });
+  }
+
+  function initData() {
+    return Promise.all([loadMapping(), loadPrices(), loadHourData()]).then(function () {
+      state.dataLoaded = true;
+      generateSmartFlips();
+      generateRandomFlips();
+      renderCurrentPage();
+    });
+  }
+
+  function refreshPrices() {
+    return Promise.all([loadPrices(), loadHourData()]).then(function () {
+      if (state.dataLoaded) {
+        generateSmartFlips();
+        generateRandomFlips();
+      }
+      if (state.currentPage === "scanner") renderScanner();
+      if (state.currentPage === "watchlist") renderWatchlist();
+      if (state.currentPage === "cards") {
+        if (state.cardsTab === "smart") renderSmartFlips();
+        if (state.cardsTab === "random") renderRandomFlips();
+      }
+      updateGamificationUI();
+    });
+  }
+
+  // ========== PROCESSED ITEMS ==========
+  function getProcessedItems() {
+    var items = [];
+    for (var i = 0; i < state.items.length; i++) {
+      var item = state.items[i];
+      var p = state.prices[item.id];
+      var h = state.hourData[item.id];
+      if (!p || !p.high || !p.low) continue;
+
+      var buy = p.low;
+      var sell = p.high;
+      var margin = sell - buy;
+      var tax = geTax(sell);
+      var afterTax = margin - tax;
+      var roi = buy > 0 ? (afterTax / buy * 100) : 0;
+      var volume = h ? ((h.highPriceVolume || 0) + (h.lowPriceVolume || 0)) : 0;
+
+      items.push({
+        id: item.id,
+        name: item.name,
+        icon: item.icon,
+        members: item.members,
+        buy: buy,
+        sell: sell,
+        margin: margin,
+        afterTax: afterTax,
+        roi: roi,
+        volume: volume,
+        highalch: item.highalch || 0,
+        limit: item.limit || 0,
+        item: item
+      });
+    }
+    return items;
+  }
+
+  // ========== SMART FLIPS ALGORITHM ==========
+  function generateSmartFlips() {
+    if (!state.dataLoaded) return;
+    var items = getProcessedItems();
+
+    // Filter: afterTax > 0, volume > 10, buy > 100
+    items = items.filter(function (i) {
+      return i.afterTax > 0 && i.volume > 10 && i.buy > 100;
+    });
+
+    // Score each: score = (afterTax * sqrt(volume)) / max(1, buy/10000)
+    for (var i = 0; i < items.length; i++) {
+      items[i].score = (items[i].afterTax * Math.sqrt(items[i].volume)) / Math.max(1, items[i].buy / 10000);
+    }
+
+    // Sort by score descending
+    items.sort(function (a, b) { return b.score - a.score; });
+
+    // Filter out items already in active task cards or skipped
+    var activeItemIds = {};
+    for (var j = 0; j < state.taskCards.length; j++) {
+      if (state.taskCards[j].status === "active") {
+        activeItemIds[state.taskCards[j].itemId] = true;
       }
     }
+
+    items = items.filter(function (i) {
+      return !activeItemIds[i.id] && !state.skippedItems[i.id];
+    });
+
+    // Take top 20
+    state.smartFlips = items.slice(0, 20);
   }
 
-  async function loadPrices() {
-    const data = await apiFetch("/latest");
-    if (data && data.data) {
-      state.prices = data.data;
+  // ========== RANDOM FLIPS ALGORITHM ==========
+  function generateRandomFlips() {
+    if (!state.dataLoaded) return;
+    var items = getProcessedItems();
+
+    // Filter: afterTax > 0, buy > 100
+    items = items.filter(function (i) {
+      return i.afterTax > 0 && i.buy > 100;
+    });
+
+    // Fisher-Yates shuffle
+    for (var i = items.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var temp = items[i];
+      items[i] = items[j];
+      items[j] = temp;
     }
-  }
 
-  async function loadHourData() {
-    const data = await apiFetch("/1h");
-    if (data && data.data) {
-      state.hourData = data.data;
+    // Filter out active cards and skipped
+    var activeItemIds = {};
+    for (var k = 0; k < state.taskCards.length; k++) {
+      if (state.taskCards[k].status === "active") {
+        activeItemIds[state.taskCards[k].itemId] = true;
+      }
     }
-  }
 
-  async function loadTimeseries(itemId, timestep) {
-    timestep = timestep || "5m";
-    const data = await apiFetch("/timeseries?id=" + itemId + "&timestep=" + timestep);
-    if (data && data.data) return data.data;
-    return [];
-  }
+    items = items.filter(function (i) {
+      return !activeItemIds[i.id] && !state.skippedItems[i.id];
+    });
 
-  async function initData() {
-    await Promise.all([loadMapping(), loadPrices(), loadHourData()]);
-    renderCurrentPage();
-  }
-
-  async function refreshPrices() {
-    await Promise.all([loadPrices(), loadHourData()]);
-    if (state.currentPage === "scanner") renderScanner();
-    if (state.currentPage === "watchlist") renderWatchlist();
-    updateGamificationUI();
+    // Take first 5
+    state.randomFlips = items.slice(0, 5);
   }
 
   // ========== ROUTING ==========
@@ -266,7 +402,7 @@
     state.currentPage = page;
     // Hide all pages
     document.querySelectorAll(".page").forEach(function (p) { p.style.display = "none"; });
-    const el = document.getElementById("page-" + page);
+    var el = document.getElementById("page-" + page);
     if (el) el.style.display = "block";
 
     // Update nav
@@ -285,7 +421,7 @@
 
   function renderCurrentPage() {
     switch (state.currentPage) {
-      case "cards": renderCards(); break;
+      case "cards": renderFeedPage(); break;
       case "scanner": renderScanner(); break;
       case "calculator": break;
       case "alarms": renderAlarms(); break;
@@ -299,19 +435,19 @@
   }
 
   function initRouting() {
-    const hash = window.location.hash.replace("#", "") || "cards";
+    var hash = window.location.hash.replace("#", "") || "cards";
     navigateTo(hash);
 
     window.addEventListener("hashchange", function () {
-      const hash = window.location.hash.replace("#", "") || "cards";
-      navigateTo(hash);
+      var hash2 = window.location.hash.replace("#", "") || "cards";
+      navigateTo(hash2);
     });
 
     // Nav clicks
     document.querySelectorAll("[data-page]").forEach(function (el) {
       el.addEventListener("click", function (e) {
         e.preventDefault();
-        const page = this.dataset.page;
+        var page = this.dataset.page;
         window.location.hash = "#" + page;
       });
     });
@@ -319,9 +455,9 @@
 
   // ========== SIDEBAR TOGGLE ==========
   function initSidebar() {
-    const toggle = document.getElementById("sidebarToggle");
-    const sidebar = document.getElementById("sidebar");
-    const overlay = document.getElementById("sidebarOverlay");
+    var toggle = document.getElementById("sidebarToggle");
+    var sidebar = document.getElementById("sidebar");
+    var overlay = document.getElementById("sidebarOverlay");
 
     toggle.addEventListener("click", function () {
       sidebar.classList.toggle("open");
@@ -333,11 +469,251 @@
     });
   }
 
-  // ========== TASK CARDS ==========
+  // ========== FEED PAGE (TABS) ==========
+  function renderFeedPage() {
+    updateActiveTabCount();
+    switchFeedTab(state.cardsTab);
+  }
+
+  function switchFeedTab(tab) {
+    state.cardsTab = tab;
+
+    // Update tab buttons
+    document.querySelectorAll(".feed-tab").forEach(function (t) {
+      t.classList.toggle("active", t.dataset.tab === tab);
+    });
+
+    // Show/hide panels
+    document.getElementById("feedSmart").style.display = tab === "smart" ? "block" : "none";
+    document.getElementById("feedRandom").style.display = tab === "random" ? "block" : "none";
+    document.getElementById("feedActive").style.display = tab === "active" ? "block" : "none";
+    document.getElementById("feedHistory").style.display = tab === "history" ? "block" : "none";
+
+    // Render the active panel
+    if (tab === "smart") renderSmartFlips();
+    if (tab === "random") renderRandomFlips();
+    if (tab === "active") renderCards();
+    if (tab === "history") renderHistory();
+  }
+
+  function updateActiveTabCount() {
+    var count = 0;
+    for (var i = 0; i < state.taskCards.length; i++) {
+      if (state.taskCards[i].status === "active") count++;
+    }
+    var el = document.getElementById("activeTabCount");
+    if (el) el.textContent = count;
+  }
+
+  function initFeedTabs() {
+    document.getElementById("feedTabs").addEventListener("click", function (e) {
+      var tab = e.target.closest(".feed-tab");
+      if (!tab) return;
+      switchFeedTab(tab.dataset.tab);
+    });
+
+    document.getElementById("shuffleRandomBtn").addEventListener("click", function () {
+      // Reset skipped for random
+      generateRandomFlips();
+      renderRandomFlips();
+      showToast("Shuffled! New random flips.", "gold", 2000);
+    });
+
+    document.getElementById("clearHistoryBtn").addEventListener("click", function () {
+      state.flipHistory = [];
+      renderHistory();
+      showToast("History cleared", "", 2000);
+    });
+  }
+
+  // ========== RENDER SMART FLIPS ==========
+  function renderSmartFlips() {
+    var grid = document.getElementById("smartFlipsGrid");
+    var empty = document.getElementById("smartFlipsEmpty");
+
+    if (state.smartFlips.length === 0) {
+      grid.innerHTML = "";
+      grid.appendChild(empty);
+      empty.style.display = "flex";
+      if (state.dataLoaded) {
+        empty.querySelector("h3").textContent = "No Smart Flips Available";
+        empty.querySelector("p").textContent = "All profitable items are already active or skipped.";
+      }
+      return;
+    }
+
+    empty.style.display = "none";
+    grid.innerHTML = state.smartFlips.map(function (item, idx) {
+      var potProfit = item.afterTax * (item.limit || 1);
+      return buildFeedCard(item, "smart", potProfit, idx + 1);
+    }).join("");
+
+    lucide.createIcons();
+    bindFeedCardActions("smart");
+  }
+
+  // ========== RENDER RANDOM FLIPS ==========
+  function renderRandomFlips() {
+    var grid = document.getElementById("randomFlipsGrid");
+    var empty = document.getElementById("randomFlipsEmpty");
+
+    if (state.randomFlips.length === 0) {
+      grid.innerHTML = "";
+      grid.appendChild(empty);
+      empty.style.display = "flex";
+      if (state.dataLoaded) {
+        empty.querySelector("h3").textContent = "No Random Flips Available";
+        empty.querySelector("p").textContent = "Try shuffling again.";
+      }
+      return;
+    }
+
+    empty.style.display = "none";
+    grid.innerHTML = state.randomFlips.map(function (item) {
+      var potProfit = item.afterTax * (item.limit || 1);
+      return buildFeedCard(item, "random", potProfit);
+    }).join("");
+
+    lucide.createIcons();
+    bindFeedCardActions("random");
+  }
+
+  function buildFeedCard(item, type, potProfit, rank) {
+    var badgeClass = type === "smart" ? "smart-badge" : "random-badge";
+    var badgeText = type === "smart" ? "SMART PICK" : "RANDOM";
+    var cardClass = type === "random" ? " random-card" : "";
+    var marginClass = item.afterTax >= 0 ? "positive" : "negative";
+    var roiDisplay = item.roi.toFixed(1);
+    var rankHtml = rank ? '<span class="feed-card-rank">#' + rank + '</span>' : '';
+
+    return '<div class="feed-card' + cardClass + '" data-item-id="' + item.id + '" data-feed-type="' + type + '">' +
+      rankHtml +
+      '<span class="feed-card-badge ' + badgeClass + '">' + badgeText + '</span>' +
+      '<div class="feed-card-header">' +
+        '<img src="' + getItemIcon(item.icon) + '" alt="" class="feed-card-icon" onerror="this.style.display=\'none\'">' +
+        '<span class="feed-card-name">' + escapeHtml(item.name) + '</span>' +
+      '</div>' +
+      '<div class="feed-card-prices">' +
+        '<div class="feed-card-stat"><span class="feed-card-stat-label">Buy</span><span class="feed-card-stat-value price-buy">' + formatGP(item.buy) + '</span></div>' +
+        '<div class="feed-card-stat"><span class="feed-card-stat-label">Sell</span><span class="feed-card-stat-value price-sell">' + formatGP(item.sell) + '</span></div>' +
+        '<div class="feed-card-stat"><span class="feed-card-stat-label">After Tax</span><span class="feed-card-stat-value ' + marginClass + '">' + formatGP(item.afterTax) + '</span></div>' +
+        '<div class="feed-card-stat"><span class="feed-card-stat-label">ROI%</span><span class="feed-card-stat-value ' + (item.roi > 0 ? "positive" : "") + '">' + roiDisplay + '%</span></div>' +
+        '<div class="feed-card-stat"><span class="feed-card-stat-label">Volume</span><span class="feed-card-stat-value">' + formatGP(item.volume) + '</span></div>' +
+        '<div class="feed-card-stat"><span class="feed-card-stat-label">Buy Limit</span><span class="feed-card-stat-value">' + (item.limit > 0 ? item.limit.toLocaleString() : "?") + '</span></div>' +
+      '</div>' +
+      '<div class="feed-card-profit-row">' +
+        '<div><span class="feed-card-profit-label">Potential Profit at Limit</span></div>' +
+        '<span class="feed-card-profit-value ' + (potProfit >= 0 ? "positive" : "negative") + '">' + formatGP(potProfit) + '</span>' +
+      '</div>' +
+      '<div class="feed-card-actions">' +
+        '<button class="btn btn-flip feed-flip-btn" data-item-id="' + item.id + '"><i data-lucide="zap"></i> Flip It</button>' +
+        '<button class="btn btn-skip btn-sm feed-skip-btn" data-item-id="' + item.id + '"><i data-lucide="x"></i> Skip</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function bindFeedCardActions(type) {
+    var container = type === "smart" ? document.getElementById("smartFlipsGrid") : document.getElementById("randomFlipsGrid");
+
+    container.querySelectorAll(".feed-flip-btn").forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var itemId = parseInt(this.dataset.itemId);
+        openNewCardModal(itemId);
+      });
+    });
+
+    container.querySelectorAll(".feed-skip-btn").forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var itemId = parseInt(this.dataset.itemId);
+        state.skippedItems[itemId] = true;
+
+        if (type === "smart") {
+          state.smartFlips = state.smartFlips.filter(function (f) { return f.id !== itemId; });
+          // Generate a replacement
+          generateSmartFlipReplacement();
+          renderSmartFlips();
+        } else {
+          state.randomFlips = state.randomFlips.filter(function (f) { return f.id !== itemId; });
+          generateRandomFlipReplacement();
+          renderRandomFlips();
+        }
+        showToast("Item skipped", "", 1500);
+      });
+    });
+
+    // Clicking card opens detail
+    container.querySelectorAll(".feed-card").forEach(function (card) {
+      card.addEventListener("click", function (e) {
+        if (e.target.closest(".feed-flip-btn") || e.target.closest(".feed-skip-btn")) return;
+        openDetailModal(parseInt(this.dataset.itemId));
+      });
+    });
+  }
+
+  function generateSmartFlipReplacement() {
+    // Regenerate full list and pick one new one that isn't already shown
+    var items = getProcessedItems();
+    items = items.filter(function (i) { return i.afterTax > 0 && i.volume > 10 && i.buy > 100; });
+    for (var i = 0; i < items.length; i++) {
+      items[i].score = (items[i].afterTax * Math.sqrt(items[i].volume)) / Math.max(1, items[i].buy / 10000);
+    }
+    items.sort(function (a, b) { return b.score - a.score; });
+
+    var activeItemIds = {};
+    for (var j = 0; j < state.taskCards.length; j++) {
+      if (state.taskCards[j].status === "active") activeItemIds[state.taskCards[j].itemId] = true;
+    }
+    var existingIds = {};
+    for (var k = 0; k < state.smartFlips.length; k++) {
+      existingIds[state.smartFlips[k].id] = true;
+    }
+
+    for (var m = 0; m < items.length; m++) {
+      var it = items[m];
+      if (!activeItemIds[it.id] && !state.skippedItems[it.id] && !existingIds[it.id]) {
+        state.smartFlips.push(it);
+        break;
+      }
+    }
+  }
+
+  function generateRandomFlipReplacement() {
+    var items = getProcessedItems();
+    items = items.filter(function (i) { return i.afterTax > 0 && i.buy > 100; });
+
+    // Shuffle
+    for (var i = items.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var temp = items[i];
+      items[i] = items[j];
+      items[j] = temp;
+    }
+
+    var activeItemIds = {};
+    for (var k = 0; k < state.taskCards.length; k++) {
+      if (state.taskCards[k].status === "active") activeItemIds[state.taskCards[k].itemId] = true;
+    }
+    var existingIds = {};
+    for (var m = 0; m < state.randomFlips.length; m++) {
+      existingIds[state.randomFlips[m].id] = true;
+    }
+
+    for (var n = 0; n < items.length; n++) {
+      var it = items[n];
+      if (!activeItemIds[it.id] && !state.skippedItems[it.id] && !existingIds[it.id]) {
+        state.randomFlips.push(it);
+        break;
+      }
+    }
+  }
+
+  // ========== TASK CARDS (Active tab) ==========
   function renderCards() {
-    const grid = document.getElementById("cardsGrid");
-    const empty = document.getElementById("cardsEmpty");
-    let cards = state.taskCards;
+    var grid = document.getElementById("cardsGrid");
+    var empty = document.getElementById("cardsEmpty");
+    var cards = state.taskCards;
 
     if (state.cardsFilter !== "all") {
       cards = cards.filter(function (c) { return c.status === state.cardsFilter; });
@@ -352,24 +728,24 @@
 
     empty.style.display = "none";
     grid.innerHTML = cards.map(function (card) {
-      const now = Date.now();
-      const elapsed = now - card.startTime;
-      const total = card.endTime - card.startTime;
-      const remaining = Math.max(0, card.endTime - now);
-      const progress = Math.min(100, (elapsed / total) * 100);
+      var now = Date.now();
+      var elapsed = now - card.startTime;
+      var total = card.endTime - card.startTime;
+      var remaining = Math.max(0, card.endTime - now);
+      var progress = Math.min(100, (elapsed / total) * 100);
 
       if (card.status === "active" && remaining <= 0) {
         card.status = "expired";
       }
 
-      const tax = geTax(card.sellPrice);
-      const profit = (card.sellPrice - card.buyPrice - tax) * card.quantity;
-      const roi = card.buyPrice > 0 ? ((card.sellPrice - card.buyPrice - tax) / card.buyPrice * 100).toFixed(1) : "0";
-      const goldNeeded = card.buyPrice * card.quantity;
-      const hasAlarm = state.alarms.some(function (a) { return a.cardId === card.id && a.active; });
+      var tax = geTax(card.sellPrice);
+      var profit = (card.sellPrice - card.buyPrice - tax) * card.quantity;
+      var roi = card.buyPrice > 0 ? ((card.sellPrice - card.buyPrice - tax) / card.buyPrice * 100).toFixed(1) : "0";
+      var goldNeeded = card.buyPrice * card.quantity;
+      var hasAlarm = state.alarms.some(function (a) { return a.cardId === card.id && a.active; });
 
-      const statusClass = card.status === "completed" ? "completed" : card.status === "expired" ? "expired" : "";
-      const statusBadge = card.status === "active" ? "active" : card.status === "completed" ? "completed-status" : "expired-status";
+      var statusClass = card.status === "completed" ? "completed" : card.status === "expired" ? "expired" : "";
+      var statusBadge = card.status === "active" ? "active" : card.status === "completed" ? "completed-status" : "expired-status";
 
       return '<div class="task-card ' + statusClass + '" data-card-id="' + card.id + '">' +
         '<span class="task-card-xp-badge">+40 XP</span>' +
@@ -408,7 +784,7 @@
   }
 
   function escapeHtml(text) {
-    const div = document.createElement("div");
+    var div = document.createElement("div");
     div.textContent = text;
     return div.innerHTML;
   }
@@ -432,23 +808,24 @@
   }
 
   function completeCard(cardId) {
-    const card = state.taskCards.find(function (c) { return c.id === cardId; });
+    var card = state.taskCards.find(function (c) { return c.id === cardId; });
     if (!card || card.status !== "active") return;
 
     card.status = "completed";
 
-    const tax = geTax(card.sellPrice);
-    const profit = (card.sellPrice - card.buyPrice - tax) * card.quantity;
-    const totalTax = tax * card.quantity;
+    var tax = geTax(card.sellPrice);
+    var profit = (card.sellPrice - card.buyPrice - tax) * card.quantity;
+    var totalTax = tax * card.quantity;
+    var roi = card.buyPrice > 0 ? ((card.sellPrice - card.buyPrice - tax) / card.buyPrice * 100) : 0;
 
     // Gamification rewards
     state.gamification.totalExp += 40;
-    const karmaEarned = Math.max(0, Math.floor(profit / 1000));
+    var karmaEarned = Math.max(0, Math.floor(profit / 1000));
     state.gamification.karmaGold += karmaEarned;
     state.gamification.cardsCompleted += 1;
 
-    const newLevel = calcLevel(state.gamification.totalExp);
-    const oldLevel = state.gamification.level;
+    var newLevel = calcLevel(state.gamification.totalExp);
+    var oldLevel = state.gamification.level;
     state.gamification.level = newLevel;
 
     // Stats
@@ -459,6 +836,22 @@
       state.stats.totalROI.push((card.sellPrice - card.buyPrice - tax) / card.buyPrice * 100);
     }
     state.stats.profitHistory.push({ time: Date.now(), profit: profit, item: card.itemName });
+
+    // Push to flip history
+    state.flipHistory.unshift({
+      id: uid(),
+      itemId: card.itemId,
+      itemName: card.itemName,
+      icon: card.icon,
+      buyPrice: card.buyPrice,
+      sellPrice: card.sellPrice,
+      quantity: card.quantity,
+      profit: profit,
+      totalTax: totalTax,
+      roi: roi,
+      karmaEarned: karmaEarned,
+      timestamp: Date.now()
+    });
 
     showToast("+40 XP", "gold", 2000);
     setTimeout(function () {
@@ -472,19 +865,24 @@
     }
 
     updateGamificationUI();
+    updateActiveTabCount();
     renderCards();
+
+    // If history panel is visible, re-render
+    if (state.cardsTab === "history") renderHistory();
   }
 
   function deleteCard(cardId) {
     state.taskCards = state.taskCards.filter(function (c) { return c.id !== cardId; });
+    updateActiveTabCount();
     renderCards();
   }
 
   function toggleAlarm(cardId) {
-    const card = state.taskCards.find(function (c) { return c.id === cardId; });
+    var card = state.taskCards.find(function (c) { return c.id === cardId; });
     if (!card) return;
 
-    const existing = state.alarms.find(function (a) { return a.cardId === cardId && a.active; });
+    var existing = state.alarms.find(function (a) { return a.cardId === cardId && a.active; });
     if (existing) {
       existing.active = false;
       state.alarms = state.alarms.filter(function (a) { return a.active || a.fired; });
@@ -506,10 +904,81 @@
     if (state.currentPage === "alarms") renderAlarms();
   }
 
+  // ========== HISTORY ==========
+  function renderHistory() {
+    var list = document.getElementById("historyList");
+    var empty = document.getElementById("historyEmpty");
+
+    // Update summary
+    updateHistorySummary();
+
+    if (state.flipHistory.length === 0) {
+      list.innerHTML = "";
+      list.appendChild(empty);
+      empty.style.display = "flex";
+      return;
+    }
+
+    empty.style.display = "none";
+    list.innerHTML = state.flipHistory.map(function (entry) {
+      var profitClass = entry.profit >= 0 ? "profit-entry" : "loss-entry";
+      var profitValueClass = entry.profit >= 0 ? "positive" : "negative";
+      var roiStr = entry.roi ? entry.roi.toFixed(1) : "0";
+
+      return '<div class="history-entry ' + profitClass + '">' +
+        '<img src="' + getItemIcon(entry.icon) + '" alt="" class="history-entry-icon" onerror="this.style.display=\'none\'">' +
+        '<div class="history-entry-info">' +
+          '<div class="history-entry-name">' + escapeHtml(entry.itemName) + '</div>' +
+          '<div class="history-entry-details">' +
+            '<span>Buy: <strong>' + formatGP(entry.buyPrice) + '</strong></span>' +
+            '<span>Sell: <strong>' + formatGP(entry.sellPrice) + '</strong></span>' +
+            '<span>Qty: <strong>' + entry.quantity.toLocaleString() + '</strong></span>' +
+            '<span>ROI: <strong>' + roiStr + '%</strong></span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="history-entry-right">' +
+          '<div class="history-entry-profit ' + profitValueClass + '">' + formatGP(entry.profit) + '</div>' +
+          (entry.karmaEarned > 0 ? '<div class="history-entry-karma">+' + entry.karmaEarned + ' KG</div>' : '') +
+          '<div class="history-entry-time">' + formatTimestamp(entry.timestamp) + '</div>' +
+        '</div>' +
+      '</div>';
+    }).join("");
+
+    // Scroll to top (newest)
+    list.scrollTop = 0;
+  }
+
+  function updateHistorySummary() {
+    var totalProfit = 0;
+    var totalTax = 0;
+    var totalKarma = 0;
+    var bestFlip = 0;
+    var rois = [];
+
+    for (var i = 0; i < state.flipHistory.length; i++) {
+      var e = state.flipHistory[i];
+      totalProfit += e.profit;
+      totalTax += e.totalTax || 0;
+      totalKarma += e.karmaEarned || 0;
+      if (e.profit > bestFlip) bestFlip = e.profit;
+      if (e.roi) rois.push(e.roi);
+    }
+
+    var avgROI = rois.length > 0 ? (rois.reduce(function (a, b) { return a + b; }, 0) / rois.length).toFixed(1) : "0";
+
+    document.getElementById("histTotalProfit").textContent = formatGP(totalProfit) + " GP";
+    document.getElementById("histTotalProfit").className = "history-kpi-value " + (totalProfit >= 0 ? "profit-text" : "loss-text");
+    document.getElementById("histFlipsDone").textContent = state.flipHistory.length;
+    document.getElementById("histAvgROI").textContent = avgROI + "%";
+    document.getElementById("histTotalTax").textContent = formatGP(totalTax) + " GP";
+    document.getElementById("histBestFlip").textContent = bestFlip > 0 ? formatGP(bestFlip) + " GP" : "—";
+    document.getElementById("histKarmaGold").textContent = totalKarma.toLocaleString();
+  }
+
   // ========== NEW CARD MODAL ==========
   function initNewCardModal() {
-    const modal = document.getElementById("newCardModal");
-    const openBtns = [document.getElementById("newCardBtn"), document.getElementById("newCardBtnEmpty")];
+    var modal = document.getElementById("newCardModal");
+    var openBtns = [document.getElementById("newCardBtn"), document.getElementById("newCardBtnEmpty")];
 
     openBtns.forEach(function (btn) {
       if (btn) btn.addEventListener("click", function () {
@@ -524,13 +993,13 @@
     document.getElementById("createCardBtn").addEventListener("click", createCard);
 
     // Item search autocomplete
-    const searchInput = document.getElementById("cardItemSearch");
-    const dropdown = document.getElementById("cardAutocomplete");
+    var searchInput = document.getElementById("cardItemSearch");
+    var dropdown = document.getElementById("cardAutocomplete");
 
     searchInput.addEventListener("input", function () {
-      const q = this.value.toLowerCase().trim();
+      var q = this.value.toLowerCase().trim();
       if (q.length < 2) { dropdown.classList.remove("show"); return; }
-      const matches = state.items.filter(function (item) {
+      var matches = state.items.filter(function (item) {
         return item.name.toLowerCase().includes(q);
       }).slice(0, 20);
 
@@ -561,7 +1030,7 @@
   }
 
   function openNewCardModal(item) {
-    const modal = document.getElementById("newCardModal");
+    var modal = document.getElementById("newCardModal");
     modal.style.display = "flex";
     state.selectedCardItem = null;
 
@@ -586,7 +1055,7 @@
   }
 
   function selectCardItem(itemId) {
-    const item = state.itemMap[itemId];
+    var item = state.itemMap[itemId];
     if (!item) return;
     state.selectedCardItem = item;
 
@@ -597,7 +1066,7 @@
     document.getElementById("cardItemLimit").textContent = "Buy limit: " + (item.limit || "Unknown");
 
     // Fill prices from API
-    const p = state.prices[item.id];
+    var p = state.prices[item.id];
     if (p) {
       document.getElementById("cardBuyPrice").value = p.low || "";
       document.getElementById("cardSellPrice").value = p.high || "";
@@ -606,12 +1075,12 @@
   }
 
   function updateCardPreview() {
-    const buy = parseInt(document.getElementById("cardBuyPrice").value) || 0;
-    const sell = parseInt(document.getElementById("cardSellPrice").value) || 0;
-    const qty = parseInt(document.getElementById("cardQuantity").value) || 1;
-    const tax = geTax(sell);
-    const profit = (sell - buy - tax) * qty;
-    const roi = buy > 0 ? ((sell - buy - tax) / buy * 100).toFixed(1) : "0";
+    var buy = parseInt(document.getElementById("cardBuyPrice").value) || 0;
+    var sell = parseInt(document.getElementById("cardSellPrice").value) || 0;
+    var qty = parseInt(document.getElementById("cardQuantity").value) || 1;
+    var tax = geTax(sell);
+    var profit = (sell - buy - tax) * qty;
+    var roi = buy > 0 ? ((sell - buy - tax) / buy * 100).toFixed(1) : "0";
 
     document.getElementById("cardGoldNeeded").textContent = formatGPFull(buy * qty);
     document.getElementById("cardEstProfit").textContent = formatGPFull(profit);
@@ -621,17 +1090,17 @@
 
   function createCard() {
     if (!state.selectedCardItem) { showToast("Select an item first", "red"); return; }
-    const buy = parseInt(document.getElementById("cardBuyPrice").value) || 0;
-    const sell = parseInt(document.getElementById("cardSellPrice").value) || 0;
-    const qty = parseInt(document.getElementById("cardQuantity").value) || 1;
-    const timerVal = document.getElementById("cardTimer").value;
-    let timerMin = parseInt(timerVal);
+    var buy = parseInt(document.getElementById("cardBuyPrice").value) || 0;
+    var sell = parseInt(document.getElementById("cardSellPrice").value) || 0;
+    var qty = parseInt(document.getElementById("cardQuantity").value) || 1;
+    var timerVal = document.getElementById("cardTimer").value;
+    var timerMin = parseInt(timerVal);
     if (timerVal === "custom") {
       timerMin = parseInt(document.getElementById("cardCustomTimer").value) || 30;
     }
 
-    const now = Date.now();
-    const card = {
+    var now = Date.now();
+    var card = {
       id: uid(),
       itemId: state.selectedCardItem.id,
       itemName: state.selectedCardItem.name,
@@ -647,49 +1116,24 @@
 
     state.taskCards.unshift(card);
     closeNewCardModal();
-    navigateTo("cards");
+
+    // Switch to active tab
+    state.cardsTab = "active";
+    if (state.currentPage === "cards") {
+      renderFeedPage();
+    } else {
+      navigateTo("cards");
+    }
+
+    updateActiveTabCount();
     showToast("Task Card created for " + card.itemName, "gold");
   }
 
   // ========== SCANNER ==========
-  function getProcessedItems() {
-    const items = [];
-    for (const item of state.items) {
-      const p = state.prices[item.id];
-      const h = state.hourData[item.id];
-      if (!p || !p.high || !p.low) continue;
-
-      const buy = p.low;
-      const sell = p.high;
-      const margin = sell - buy;
-      const tax = geTax(sell);
-      const afterTax = margin - tax;
-      const roi = buy > 0 ? (afterTax / buy * 100) : 0;
-      const volume = h ? ((h.highPriceVolume || 0) + (h.lowPriceVolume || 0)) : 0;
-
-      items.push({
-        id: item.id,
-        name: item.name,
-        icon: item.icon,
-        members: item.members,
-        buy: buy,
-        sell: sell,
-        margin: margin,
-        afterTax: afterTax,
-        roi: roi,
-        volume: volume,
-        highalch: item.highalch || 0,
-        limit: item.limit || 0,
-        item: item
-      });
-    }
-    return items;
-  }
-
   function renderScanner() {
-    const skeleton = document.getElementById("scannerSkeleton");
-    const tbody = document.getElementById("scannerBody");
-    const loadMore = document.getElementById("scannerLoadMore");
+    var skeleton = document.getElementById("scannerSkeleton");
+    var tbody = document.getElementById("scannerBody");
+    var loadMore = document.getElementById("scannerLoadMore");
 
     if (state.items.length === 0) {
       skeleton.style.display = "flex";
@@ -699,7 +1143,7 @@
     }
     skeleton.style.display = "none";
 
-    let items = getProcessedItems();
+    var items = getProcessedItems();
 
     // Filter
     if (state.scannerFilter === "best-margins") {
@@ -714,26 +1158,26 @@
 
     // Search
     if (state.scannerSearchText) {
-      const q = state.scannerSearchText.toLowerCase();
+      var q = state.scannerSearchText.toLowerCase();
       items = items.filter(function (i) { return i.name.toLowerCase().includes(q); });
     }
 
     // Sort
     items.sort(function (a, b) {
-      const va = a[state.scannerSort.key] || 0;
-      const vb = b[state.scannerSort.key] || 0;
+      var va = a[state.scannerSort.key] || 0;
+      var vb = b[state.scannerSort.key] || 0;
       if (typeof va === "string") return va.localeCompare(vb) * state.scannerSort.dir;
       return (va - vb) * state.scannerSort.dir;
     });
 
-    const total = items.length;
-    const countEl = document.getElementById("scannerItemCount");
+    var total = items.length;
+    var countEl = document.getElementById("scannerItemCount");
     if (countEl) countEl.textContent = "(" + total + " items)";
-    const pageItems = items.slice(0, (state.scannerPage + 1) * ITEMS_PER_PAGE);
+    var pageItems = items.slice(0, (state.scannerPage + 1) * ITEMS_PER_PAGE);
 
     tbody.innerHTML = pageItems.map(function (item) {
-      const marginClass = item.afterTax >= 0 ? "positive" : "negative";
-      const roiClass = item.roi > 0 ? "positive" : "";
+      var marginClass = item.afterTax >= 0 ? "positive" : "negative";
+      var roiClass = item.roi > 0 ? "positive" : "";
       return '<tr class="scanner-row" data-item-id="' + item.id + '">' +
         '<td class="item-icon-cell"><img src="' + getItemIcon(item.icon) + '" alt="" onerror="this.style.display=\'none\'"></td>' +
         '<td>' + escapeHtml(item.name) + '</td>' +
@@ -774,7 +1218,7 @@
     });
 
     document.getElementById("scannerFilterBar").addEventListener("click", function (e) {
-      const pill = e.target.closest(".filter-pill");
+      var pill = e.target.closest(".filter-pill");
       if (!pill) return;
       this.querySelectorAll(".filter-pill").forEach(function (p) { p.classList.remove("active"); });
       pill.classList.add("active");
@@ -785,7 +1229,7 @@
 
     document.querySelectorAll("#scannerTable th.sortable").forEach(function (th) {
       th.addEventListener("click", function () {
-        const key = this.dataset.sort;
+        var key = this.dataset.sort;
         if (state.scannerSort.key === key) {
           state.scannerSort.dir *= -1;
         } else {
@@ -805,21 +1249,21 @@
 
   // ========== ITEM DETAIL MODAL ==========
   function openDetailModal(itemId) {
-    const item = state.itemMap[itemId];
+    var item = state.itemMap[itemId];
     if (!item) return;
-    const p = state.prices[itemId];
-    const modal = document.getElementById("itemDetailModal");
+    var p = state.prices[itemId];
+    var modal = document.getElementById("itemDetailModal");
 
     document.getElementById("detailItemIcon").src = getItemIcon(item.icon);
     document.getElementById("detailItemName").textContent = item.name;
 
     if (p) {
-      const buy = p.low || 0;
-      const sell = p.high || 0;
-      const margin = sell - buy;
-      const tax = geTax(sell);
-      const afterTax = margin - tax;
-      const roi = buy > 0 ? ((afterTax / buy) * 100).toFixed(1) : "0";
+      var buy = p.low || 0;
+      var sell = p.high || 0;
+      var margin = sell - buy;
+      var tax = geTax(sell);
+      var afterTax = margin - tax;
+      var roi = buy > 0 ? ((afterTax / buy) * 100).toFixed(1) : "0";
 
       document.getElementById("detailBuy").textContent = formatGP(buy);
       document.getElementById("detailSell").textContent = formatGP(sell);
@@ -827,9 +1271,9 @@
       document.getElementById("detailAfterTax").textContent = formatGP(afterTax);
       document.getElementById("detailROI").textContent = roi + "%";
 
-      const limit = item.limit || 0;
+      var limit = item.limit || 0;
       document.getElementById("detailLimit").textContent = limit > 0 ? limit.toLocaleString() : "Unknown";
-      const maxProfit = limit > 0 ? afterTax * limit : 0;
+      var maxProfit = limit > 0 ? afterTax * limit : 0;
       document.getElementById("detailMaxProfit").textContent = maxProfit > 0 ? formatGP(maxProfit) : "—";
       document.getElementById("detailHighAlch").textContent = item.highalch ? formatGP(item.highalch) : "—";
     }
@@ -852,7 +1296,7 @@
       modal.style.display = "none";
       navigateTo("calculator");
       // Auto-fill the calculator
-      const calcSearch = document.getElementById("calcItemSearch");
+      var calcSearch = document.getElementById("calcItemSearch");
       if (calcSearch) calcSearch.value = item.name;
       state.calcSelectedItem = item;
       var p2 = state.prices[itemId];
@@ -863,58 +1307,59 @@
     };
   }
 
-  async function loadTimeseriesChart(itemId) {
-    const canvas = document.getElementById("detailChart");
+  function loadTimeseriesChart(itemId) {
+    var canvas = document.getElementById("detailChart");
     if (state.detailChart) { state.detailChart.destroy(); state.detailChart = null; }
 
-    const data = await loadTimeseries(itemId, "5m");
-    if (!data || data.length === 0) return;
+    loadTimeseries(itemId, "5m").then(function (data) {
+      if (!data || data.length === 0) return;
 
-    const labels = data.map(function (d) {
-      return new Date(d.timestamp * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    });
-    const highs = data.map(function (d) { return d.avgHighPrice; });
-    const lows = data.map(function (d) { return d.avgLowPrice; });
+      var labels = data.map(function (d) {
+        return new Date(d.timestamp * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      });
+      var highs = data.map(function (d) { return d.avgHighPrice; });
+      var lows = data.map(function (d) { return d.avgLowPrice; });
 
-    state.detailChart = new Chart(canvas, {
-      type: "line",
-      data: {
-        labels: labels,
-        datasets: [
-          { label: "Buy Price", data: highs, borderColor: "#00ff00", backgroundColor: "rgba(0,255,0,0.05)", borderWidth: 1.5, pointRadius: 0, fill: false },
-          { label: "Sell Price", data: lows, borderColor: "#ff4444", backgroundColor: "rgba(255,68,68,0.05)", borderWidth: 1.5, pointRadius: 0, fill: false }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { labels: { color: "#888", font: { size: 11 } } },
-          tooltip: { backgroundColor: "#1b1b1e", titleColor: "#e8e8e8", bodyColor: "#b5b5b5", borderColor: "rgba(255,255,255,0.1)", borderWidth: 1 }
+      state.detailChart = new Chart(canvas, {
+        type: "line",
+        data: {
+          labels: labels,
+          datasets: [
+            { label: "Buy Price", data: highs, borderColor: "#00ff00", backgroundColor: "rgba(0,255,0,0.05)", borderWidth: 1.5, pointRadius: 0, fill: false },
+            { label: "Sell Price", data: lows, borderColor: "#ff4444", backgroundColor: "rgba(255,68,68,0.05)", borderWidth: 1.5, pointRadius: 0, fill: false }
+          ]
         },
-        scales: {
-          x: { ticks: { color: "#666", font: { size: 10 }, maxTicksLimit: 10 }, grid: { color: "rgba(255,255,255,0.04)" } },
-          y: { ticks: { color: "#888", font: { size: 10 }, callback: function (v) { return formatGP(v); } }, grid: { color: "rgba(255,255,255,0.04)" } }
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: "#888", font: { size: 11 } } },
+            tooltip: { backgroundColor: "#1b1b1e", titleColor: "#e8e8e8", bodyColor: "#b5b5b5", borderColor: "rgba(255,255,255,0.1)", borderWidth: 1 }
+          },
+          scales: {
+            x: { ticks: { color: "#666", font: { size: 10 }, maxTicksLimit: 10 }, grid: { color: "rgba(255,255,255,0.04)" } },
+            y: { ticks: { color: "#888", font: { size: 10 }, callback: function (v) { return formatGP(v); } }, grid: { color: "rgba(255,255,255,0.04)" } }
+          }
         }
-      }
+      });
     });
   }
 
   function initDetailModal() {
-    const modal = document.getElementById("itemDetailModal");
+    var modal = document.getElementById("itemDetailModal");
     document.getElementById("closeDetailModal").addEventListener("click", function () { modal.style.display = "none"; });
     modal.addEventListener("click", function (e) { if (e.target === modal) modal.style.display = "none"; });
   }
 
   // ========== CALCULATOR ==========
   function initCalculator() {
-    const searchInput = document.getElementById("calcItemSearch");
-    const dropdown = document.getElementById("calcAutocomplete");
+    var searchInput = document.getElementById("calcItemSearch");
+    var dropdown = document.getElementById("calcAutocomplete");
 
     searchInput.addEventListener("input", function () {
-      const q = this.value.toLowerCase().trim();
+      var q = this.value.toLowerCase().trim();
       if (q.length < 2) { dropdown.classList.remove("show"); return; }
-      const matches = state.items.filter(function (item) {
+      var matches = state.items.filter(function (item) {
         return item.name.toLowerCase().includes(q);
       }).slice(0, 15);
 
@@ -927,13 +1372,13 @@
 
       dropdown.querySelectorAll(".autocomplete-item").forEach(function (el) {
         el.addEventListener("click", function () {
-          const item = state.itemMap[parseInt(this.dataset.itemId)];
+          var item = state.itemMap[parseInt(this.dataset.itemId)];
           if (!item) return;
           state.calcSelectedItem = item;
           searchInput.value = item.name;
           dropdown.classList.remove("show");
 
-          const p = state.prices[item.id];
+          var p = state.prices[item.id];
           if (p) {
             document.getElementById("calcBuyPrice").value = p.low || "";
             document.getElementById("calcSellPrice").value = p.high || "";
@@ -953,19 +1398,19 @@
   }
 
   function calculateTax() {
-    const buy = parseInt(document.getElementById("calcBuyPrice").value) || 0;
-    const sell = parseInt(document.getElementById("calcSellPrice").value) || 0;
-    const qty = parseInt(document.getElementById("calcQuantity").value) || 1;
+    var buy = parseInt(document.getElementById("calcBuyPrice").value) || 0;
+    var sell = parseInt(document.getElementById("calcSellPrice").value) || 0;
+    var qty = parseInt(document.getElementById("calcQuantity").value) || 1;
 
-    const tax = geTax(sell);
-    const gross = sell - buy;
-    const net = gross - tax;
-    const totalProfit = net * qty;
-    const totalTax = tax * qty;
-    const roi = buy > 0 ? ((net / buy) * 100).toFixed(2) : "0";
-    const breakeven = buy > 0 ? Math.ceil(buy / 0.99) : 0;
-    const limit = state.calcSelectedItem ? (state.calcSelectedItem.limit || 0) : 0;
-    const maxProfit = net * limit;
+    var tax = geTax(sell);
+    var gross = sell - buy;
+    var net = gross - tax;
+    var totalProfit = net * qty;
+    var totalTax = tax * qty;
+    var roi = buy > 0 ? ((net / buy) * 100).toFixed(2) : "0";
+    var breakeven = buy > 0 ? Math.ceil(buy / 0.99) : 0;
+    var limit = state.calcSelectedItem ? (state.calcSelectedItem.limit || 0) : 0;
+    var maxProfit = net * limit;
 
     document.getElementById("resTaxUnit").textContent = formatGPFull(tax);
     document.getElementById("resGrossMargin").textContent = formatGPFull(gross);
@@ -980,9 +1425,9 @@
 
   // ========== ALARMS ==========
   function renderAlarms() {
-    const list = document.getElementById("alarmsList");
-    const empty = document.getElementById("alarmsEmpty");
-    const activeAlarms = state.alarms.filter(function (a) { return a.active || a.fired; });
+    var list = document.getElementById("alarmsList");
+    var empty = document.getElementById("alarmsEmpty");
+    var activeAlarms = state.alarms.filter(function (a) { return a.active || a.fired; });
 
     if (activeAlarms.length === 0) {
       list.innerHTML = "";
@@ -993,14 +1438,14 @@
 
     empty.style.display = "none";
     list.innerHTML = activeAlarms.map(function (alarm) {
-      const now = Date.now();
-      const remaining = Math.max(0, alarm.endTime - now);
-      const total = alarm.endTime - alarm.startTime;
-      const progress = Math.min(100, ((total - remaining) / total) * 100);
-      const isReady = remaining <= 0;
-      const firedClass = isReady ? "fired" : "";
-      const timeText = isReady ? "Ready!" : formatTime(remaining);
-      const timeClass = isReady ? "ready" : "";
+      var now = Date.now();
+      var remaining = Math.max(0, alarm.endTime - now);
+      var total = alarm.endTime - alarm.startTime;
+      var progress = Math.min(100, ((total - remaining) / total) * 100);
+      var isReady = remaining <= 0;
+      var firedClass = isReady ? "fired" : "";
+      var timeText = isReady ? "Ready!" : formatTime(remaining);
+      var timeClass = isReady ? "ready" : "";
 
       return '<div class="alarm-entry ' + firedClass + '" data-alarm-id="' + alarm.id + '">' +
         '<img src="' + getItemIcon(alarm.itemIcon) + '" alt="" class="alarm-entry-icon" onerror="this.style.display=\'none\'">' +
@@ -1019,7 +1464,7 @@
 
     list.querySelectorAll(".dismiss-alarm").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        const id = this.dataset.alarmId;
+        var id = this.dataset.alarmId;
         state.alarms = state.alarms.filter(function (a) { return a.id !== id; });
         updateAlarmBadge();
         renderAlarms();
@@ -1028,9 +1473,9 @@
   }
 
   function updateAlarmBadge() {
-    const count = state.alarms.filter(function (a) { return a.active; }).length;
-    const badge = document.getElementById("alarmBadge");
-    const mobileBadge = document.getElementById("mobileAlarmBadge");
+    var count = state.alarms.filter(function (a) { return a.active; }).length;
+    var badge = document.getElementById("alarmBadge");
+    var mobileBadge = document.getElementById("mobileAlarmBadge");
     if (count > 0) {
       badge.textContent = count;
       badge.style.display = "inline";
@@ -1043,9 +1488,10 @@
   }
 
   function tickAlarms() {
-    const now = Date.now();
-    let changed = false;
-    for (const alarm of state.alarms) {
+    var now = Date.now();
+    var changed = false;
+    for (var i = 0; i < state.alarms.length; i++) {
+      var alarm = state.alarms[i];
       if (alarm.active && !alarm.fired && now >= alarm.endTime) {
         alarm.fired = true;
         alarm.active = false;
@@ -1057,7 +1503,7 @@
     if (changed) {
       updateAlarmBadge();
       if (state.currentPage === "alarms") renderAlarms();
-      if (state.currentPage === "cards") renderCards();
+      if (state.currentPage === "cards" && state.cardsTab === "active") renderCards();
     }
   }
 
@@ -1076,7 +1522,7 @@
       showToast("Already on watchlist", "", 2000);
       return;
     }
-    const item = state.itemMap[itemId];
+    var item = state.itemMap[itemId];
     if (!item) return;
     state.watchlist.push({ id: itemId, name: item.name, icon: item.icon });
     showToast(item.name + " added to watchlist", "gold", 2000);
@@ -1084,8 +1530,8 @@
   }
 
   function renderWatchlist() {
-    const grid = document.getElementById("watchlistGrid");
-    const empty = document.getElementById("watchlistEmpty");
+    var grid = document.getElementById("watchlistGrid");
+    var empty = document.getElementById("watchlistEmpty");
 
     if (state.watchlist.length === 0) {
       grid.innerHTML = "";
@@ -1096,12 +1542,12 @@
 
     empty.style.display = "none";
     grid.innerHTML = state.watchlist.map(function (w) {
-      const p = state.prices[w.id];
-      const buy = p ? (p.low || 0) : 0;
-      const sell = p ? (p.high || 0) : 0;
-      const margin = sell - buy;
-      const tax = geTax(sell);
-      const afterTax = margin - tax;
+      var p = state.prices[w.id];
+      var buy = p ? (p.low || 0) : 0;
+      var sell = p ? (p.high || 0) : 0;
+      var margin = sell - buy;
+      var tax = geTax(sell);
+      var afterTax = margin - tax;
 
       return '<div class="watchlist-card" data-item-id="' + w.id + '">' +
         '<div class="watchlist-card-header">' +
@@ -1130,7 +1576,7 @@
     grid.querySelectorAll(".remove-watchlist").forEach(function (btn) {
       btn.addEventListener("click", function (e) {
         e.stopPropagation();
-        const id = parseInt(this.dataset.itemId);
+        var id = parseInt(this.dataset.itemId);
         state.watchlist = state.watchlist.filter(function (w) { return w.id !== id; });
         renderWatchlist();
       });
@@ -1138,19 +1584,19 @@
   }
 
   function initWatchlist() {
-    const modal = document.getElementById("watchlistModal");
+    var modal = document.getElementById("watchlistModal");
     document.getElementById("addWatchlistBtn").addEventListener("click", function () { modal.style.display = "flex"; });
     document.getElementById("closeWatchlistModal").addEventListener("click", function () { modal.style.display = "none"; });
     document.getElementById("cancelWatchlist").addEventListener("click", function () { modal.style.display = "none"; });
     modal.addEventListener("click", function (e) { if (e.target === modal) modal.style.display = "none"; });
 
-    const searchInput = document.getElementById("watchlistItemSearch");
-    const dropdown = document.getElementById("watchlistAutocomplete");
+    var searchInput = document.getElementById("watchlistItemSearch");
+    var dropdown = document.getElementById("watchlistAutocomplete");
 
     searchInput.addEventListener("input", function () {
-      const q = this.value.toLowerCase().trim();
+      var q = this.value.toLowerCase().trim();
       if (q.length < 2) { dropdown.classList.remove("show"); return; }
-      const matches = state.items.filter(function (item) {
+      var matches = state.items.filter(function (item) {
         return item.name.toLowerCase().includes(q);
       }).slice(0, 15);
       dropdown.innerHTML = matches.map(function (item) {
@@ -1162,9 +1608,9 @@
 
       dropdown.querySelectorAll(".autocomplete-item").forEach(function (el) {
         el.addEventListener("click", function () {
-          const itemId = parseInt(this.dataset.itemId);
+          var itemId = parseInt(this.dataset.itemId);
           state.selectedWatchlistItem = itemId;
-          const item = state.itemMap[itemId];
+          var item = state.itemMap[itemId];
           searchInput.value = item ? item.name : "";
           dropdown.classList.remove("show");
         });
@@ -1183,12 +1629,12 @@
 
   // ========== STATS ==========
   function renderStats() {
-    const g = state.gamification;
-    const s = state.stats;
-    const sessionMs = Date.now() - s.sessionStart;
-    const sessionMin = Math.floor(sessionMs / 60000);
-    const profitPerHour = sessionMs > 0 ? Math.floor(s.totalProfit / (sessionMs / 3600000)) : 0;
-    const avgROI = s.totalROI.length > 0 ? (s.totalROI.reduce(function (a, b) { return a + b; }, 0) / s.totalROI.length).toFixed(1) : "0";
+    var g = state.gamification;
+    var s = state.stats;
+    var sessionMs = Date.now() - s.sessionStart;
+    var sessionMin = Math.floor(sessionMs / 60000);
+    var profitPerHour = sessionMs > 0 ? Math.floor(s.totalProfit / (sessionMs / 3600000)) : 0;
+    var avgROI = s.totalROI.length > 0 ? (s.totalROI.reduce(function (a, b) { return a + b; }, 0) / s.totalROI.length).toFixed(1) : "0";
 
     document.getElementById("statTotalProfit").textContent = formatGP(s.totalProfit) + " GP";
     document.getElementById("statAvgROI").textContent = avgROI + "%";
@@ -1208,10 +1654,10 @@
   }
 
   function renderProfitChart() {
-    const canvas = document.getElementById("profitChart");
+    var canvas = document.getElementById("profitChart");
     if (state.profitChart) { state.profitChart.destroy(); }
 
-    const history = state.stats.profitHistory;
+    var history = state.stats.profitHistory;
     if (history.length === 0) {
       state.profitChart = new Chart(canvas, {
         type: "bar",
@@ -1221,10 +1667,10 @@
       return;
     }
 
-    const labels = history.map(function (h) { return h.item; });
-    const data = history.map(function (h) { return h.profit; });
-    const colors = data.map(function (v) { return v >= 0 ? "rgba(0,255,0,0.5)" : "rgba(255,68,68,0.5)"; });
-    const borders = data.map(function (v) { return v >= 0 ? "#00ff00" : "#ff4444"; });
+    var labels = history.map(function (h) { return h.item; });
+    var data = history.map(function (h) { return h.profit; });
+    var colors = data.map(function (v) { return v >= 0 ? "rgba(0,255,0,0.5)" : "rgba(255,68,68,0.5)"; });
+    var borders = data.map(function (v) { return v >= 0 ? "#00ff00" : "#ff4444"; });
 
     state.profitChart = new Chart(canvas, {
       type: "bar",
@@ -1250,7 +1696,7 @@
   }
 
   // ========== GUIDES ==========
-  const GUIDES = {
+  var GUIDES = {
     "101": {
       title: "Flipping 101",
       content: "<h2>What is Flipping?</h2><p>Flipping is the act of buying items on the Grand Exchange at a low price and selling them at a higher price for profit. It's one of the most reliable money-making methods in OSRS.</p><h2>How the GE Works</h2><p>The Grand Exchange matches buyers and sellers. When you place a buy offer at a certain price, you'll get the item if someone sells at or below your price. The difference between what people buy and sell at is the <strong>margin</strong>.</p><h2>The GE Tax</h2><p>Jagex introduced a 1% tax on all GE sales, capped at 5M GP. This means: <code>Tax = min(sellPrice × 0.01, 5,000,000)</code>. You need to account for this in your profit calculations.</p><h2>Key Terms</h2><ul><li><strong>Margin</strong> — The difference between buy and sell price</li><li><strong>Spread</strong> — Same as margin</li><li><strong>ROI</strong> — Return on Investment (profit / buy price × 100)</li><li><strong>Buy Limit</strong> — Max items you can buy per 4 hours</li><li><strong>Margin Check</strong> — Buying and selling 1 item to find current prices</li></ul>"
@@ -1270,7 +1716,7 @@
   };
 
   function renderGuides(tab) {
-    const guide = GUIDES[tab || "101"];
+    var guide = GUIDES[tab || "101"];
     if (!guide) return;
     document.getElementById("guideContent").innerHTML = guide.content;
 
@@ -1281,7 +1727,7 @@
 
   function initGuides() {
     document.querySelector("#page-guides .guides-tabs").addEventListener("click", function (e) {
-      const pill = e.target.closest(".filter-pill");
+      var pill = e.target.closest(".filter-pill");
       if (!pill) return;
       renderGuides(pill.dataset.guide);
     });
@@ -1289,9 +1735,9 @@
 
   // ========== BLOG ==========
   function renderBlog() {
-    const list = document.getElementById("blogList");
-    const empty = document.getElementById("blogEmpty");
-    const postView = document.getElementById("blogPostView");
+    var list = document.getElementById("blogList");
+    var empty = document.getElementById("blogEmpty");
+    var postView = document.getElementById("blogPostView");
 
     postView.style.display = "none";
     list.style.display = "flex";
@@ -1305,7 +1751,7 @@
 
     empty.style.display = "none";
     list.innerHTML = state.blogPosts.map(function (post) {
-      const excerpt = post.content.replace(/[#*`\[\]()]/g, "").substring(0, 150) + "...";
+      var excerpt = post.content.replace(/[#*`\[\]()]/g, "").substring(0, 150) + "...";
       return '<div class="blog-card" data-post-id="' + post.id + '">' +
         '<div class="blog-card-title">' + escapeHtml(post.title) + '</div>' +
         '<div class="blog-card-date">' + post.date + '</div>' +
@@ -1315,18 +1761,18 @@
 
     list.querySelectorAll(".blog-card").forEach(function (card) {
       card.addEventListener("click", function () {
-        const postId = this.dataset.postId;
+        var postId = this.dataset.postId;
         showBlogPost(postId);
       });
     });
   }
 
   function showBlogPost(postId) {
-    const post = state.blogPosts.find(function (p) { return p.id === postId; });
+    var post = state.blogPosts.find(function (p) { return p.id === postId; });
     if (!post) return;
 
     document.getElementById("blogList").style.display = "none";
-    const postView = document.getElementById("blogPostView");
+    var postView = document.getElementById("blogPostView");
     postView.style.display = "block";
 
     document.getElementById("blogArticle").innerHTML =
@@ -1354,7 +1800,7 @@
   }
 
   function renderAdminPosts() {
-    const list = document.getElementById("adminPostsList");
+    var list = document.getElementById("adminPostsList");
     if (state.blogPosts.length === 0) {
       list.innerHTML = '<p class="text-muted">No posts yet.</p>';
       return;
@@ -1371,7 +1817,7 @@
 
     list.querySelectorAll(".edit-post").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        const post = state.blogPosts.find(function (p) { return p.id === btn.dataset.postId; });
+        var post = state.blogPosts.find(function (p) { return p.id === btn.dataset.postId; });
         if (post) {
           state.editingPostId = post.id;
           document.getElementById("adminPostTitle").value = post.title;
@@ -1391,13 +1837,13 @@
   }
 
   function updateAdminPreview() {
-    const content = document.getElementById("adminPostContent").value;
+    var content = document.getElementById("adminPostContent").value;
     document.getElementById("adminPreview").innerHTML = renderMarkdown(content);
   }
 
   function initAdmin() {
     document.getElementById("adminLoginBtn").addEventListener("click", function () {
-      const pw = document.getElementById("adminPassword").value;
+      var pw = document.getElementById("adminPassword").value;
       if (pw === "flipit2admin") {
         state.adminAuthed = true;
         document.getElementById("adminError").style.display = "none";
@@ -1410,12 +1856,12 @@
     document.getElementById("adminPostContent").addEventListener("input", updateAdminPreview);
 
     document.getElementById("adminPublishBtn").addEventListener("click", function () {
-      const title = document.getElementById("adminPostTitle").value.trim();
-      const content = document.getElementById("adminPostContent").value.trim();
+      var title = document.getElementById("adminPostTitle").value.trim();
+      var content = document.getElementById("adminPostContent").value.trim();
       if (!title || !content) { showToast("Title and content required", "red"); return; }
 
       if (state.editingPostId) {
-        const post = state.blogPosts.find(function (p) { return p.id === state.editingPostId; });
+        var post = state.blogPosts.find(function (p) { return p.id === state.editingPostId; });
         if (post) {
           post.title = title;
           post.content = content;
@@ -1448,7 +1894,7 @@
 
   // ========== SETTINGS ==========
   function renderSettings() {
-    const g = state.gamification;
+    var g = state.gamification;
     document.getElementById("settingsKarma").textContent = g.karmaGold.toLocaleString();
     document.getElementById("settingsExp").textContent = g.totalExp.toLocaleString();
     document.getElementById("settingsLevel").textContent = g.level + " — " + getLevelName(g.level);
@@ -1461,27 +1907,29 @@
     });
 
     document.getElementById("generateApiKey").addEventListener("click", function () {
-      const key = "flt2_" + uid() + uid();
+      var key = "flt2_" + uid() + uid();
       document.getElementById("settingsApiKey").value = key;
       showToast("API Key generated", "gold");
     });
 
     document.getElementById("exportJsonBtn").addEventListener("click", function () {
-      const data = JSON.stringify({
+      var data = JSON.stringify({
         taskCards: state.taskCards,
         gamification: state.gamification,
         stats: state.stats,
         watchlist: state.watchlist,
-        blogPosts: state.blogPosts
+        blogPosts: state.blogPosts,
+        flipHistory: state.flipHistory
       }, null, 2);
       downloadFile("flipit2-export.json", data, "application/json");
     });
 
     document.getElementById("exportCsvBtn").addEventListener("click", function () {
-      let csv = "Item,Buy,Sell,Quantity,Status,Profit\n";
-      for (const card of state.taskCards) {
-        const tax = geTax(card.sellPrice);
-        const profit = (card.sellPrice - card.buyPrice - tax) * card.quantity;
+      var csv = "Item,Buy,Sell,Quantity,Status,Profit\n";
+      for (var i = 0; i < state.taskCards.length; i++) {
+        var card = state.taskCards[i];
+        var tax = geTax(card.sellPrice);
+        var profit = (card.sellPrice - card.buyPrice - tax) * card.quantity;
         csv += [card.itemName, card.buyPrice, card.sellPrice, card.quantity, card.status, profit].join(",") + "\n";
       }
       downloadFile("flipit2-export.csv", csv, "text/csv");
@@ -1492,17 +1940,18 @@
     });
 
     document.getElementById("importFileInput").addEventListener("change", function () {
-      const file = this.files[0];
+      var file = this.files[0];
       if (!file) return;
-      const reader = new FileReader();
+      var reader = new FileReader();
       reader.onload = function (e) {
         try {
-          const data = JSON.parse(e.target.result);
+          var data = JSON.parse(e.target.result);
           if (data.taskCards) state.taskCards = data.taskCards;
           if (data.gamification) Object.assign(state.gamification, data.gamification);
           if (data.stats) Object.assign(state.stats, data.stats);
           if (data.watchlist) state.watchlist = data.watchlist;
           if (data.blogPosts) state.blogPosts = data.blogPosts;
+          if (data.flipHistory) state.flipHistory = data.flipHistory;
           updateGamificationUI();
           showToast("Data imported", "gold");
         } catch (err) {
@@ -1516,17 +1965,19 @@
       state.taskCards = [];
       state.alarms = [];
       state.watchlist = [];
+      state.flipHistory = [];
       state.gamification = { karmaGold: 0, totalExp: 0, level: 1, cardsCompleted: 0 };
       state.stats = { totalProfit: 0, totalTax: 0, totalROI: [], flipsCompleted: 0, profitHistory: [], sessionStart: Date.now() };
       updateGamificationUI();
+      updateActiveTabCount();
       showToast("All data cleared", "", 2000);
     });
   }
 
   function downloadFile(name, content, type) {
-    const blob = new Blob([content], { type: type });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
+    var blob = new Blob([content], { type: type });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
     a.href = url;
     a.download = name;
     a.click();
@@ -1535,7 +1986,7 @@
 
   // ========== AUTH ==========
   function initAuth() {
-    const modal = document.getElementById("authModal");
+    var modal = document.getElementById("authModal");
     document.getElementById("authBtn").addEventListener("click", function () { modal.style.display = "flex"; });
     document.getElementById("closeAuthModal").addEventListener("click", function () { modal.style.display = "none"; });
     modal.addEventListener("click", function (e) { if (e.target === modal) modal.style.display = "none"; });
@@ -1557,9 +2008,9 @@
     });
 
     document.getElementById("loginBtn").addEventListener("click", function () {
-      const u = document.getElementById("loginUsername").value.trim();
-      const p = document.getElementById("loginPassword").value;
-      const user = state.auth.users.find(function (usr) { return usr.username === u && usr.password === p; });
+      var u = document.getElementById("loginUsername").value.trim();
+      var p = document.getElementById("loginPassword").value;
+      var user = state.auth.users.find(function (usr) { return usr.username === u && usr.password === p; });
       if (user) {
         state.auth.loggedIn = true;
         state.auth.username = u;
@@ -1571,8 +2022,8 @@
     });
 
     document.getElementById("registerBtn").addEventListener("click", function () {
-      const u = document.getElementById("registerUsername").value.trim();
-      const p = document.getElementById("registerPassword").value;
+      var u = document.getElementById("registerUsername").value.trim();
+      var p = document.getElementById("registerPassword").value;
       if (!u || !p) { showToast("Fill in all fields", "red"); return; }
       if (state.auth.users.find(function (usr) { return usr.username === u; })) {
         showToast("Username taken", "red"); return;
@@ -1594,7 +2045,7 @@
 
   // ========== GAMIFICATION UI ==========
   function updateGamificationUI() {
-    const g = state.gamification;
+    var g = state.gamification;
     g.level = calcLevel(g.totalExp);
 
     document.getElementById("headerKarmaGold").textContent = g.karmaGold.toLocaleString();
@@ -1605,7 +2056,7 @@
   // ========== CARD FILTER ==========
   function initCardFilters() {
     document.getElementById("cardsFilterBar").addEventListener("click", function (e) {
-      const pill = e.target.closest(".filter-pill");
+      var pill = e.target.closest(".filter-pill");
       if (!pill) return;
       this.querySelectorAll(".filter-pill").forEach(function (p) { p.classList.remove("active"); });
       pill.classList.add("active");
@@ -1630,17 +2081,17 @@
     setInterval(function () {
       tickAlarms();
       // Update active card timers and alarms UI
-      if (state.currentPage === "cards") {
-        const now = Date.now();
+      if (state.currentPage === "cards" && state.cardsTab === "active") {
+        var now = Date.now();
         document.querySelectorAll(".task-card[data-card-id]").forEach(function (el) {
-          const cardId = el.dataset.cardId;
-          const card = state.taskCards.find(function (c) { return c.id === cardId; });
+          var cardId = el.dataset.cardId;
+          var card = state.taskCards.find(function (c) { return c.id === cardId; });
           if (!card || card.status !== "active") return;
-          const remaining = Math.max(0, card.endTime - now);
-          const total = card.endTime - card.startTime;
-          const progress = Math.min(100, ((now - card.startTime) / total) * 100);
-          const timerVal = el.querySelector(".task-card-timer-value");
-          const progressFill = el.querySelector(".task-card-progress-fill");
+          var remaining = Math.max(0, card.endTime - now);
+          var total = card.endTime - card.startTime;
+          var progress = Math.min(100, ((now - card.startTime) / total) * 100);
+          var timerVal = el.querySelector(".task-card-timer-value");
+          var progressFill = el.querySelector(".task-card-progress-fill");
           if (timerVal) timerVal.textContent = formatTimeShort(remaining);
           if (progressFill) {
             progressFill.style.width = progress + "%";
@@ -1648,6 +2099,7 @@
           }
           if (remaining <= 0 && card.status === "active") {
             card.status = "expired";
+            updateActiveTabCount();
             renderCards();
           }
         });
@@ -1666,7 +2118,7 @@
   });
 
   // ========== INIT ==========
-  async function init() {
+  function init() {
     initRouting();
     initSidebar();
     initNewCardModal();
@@ -1681,17 +2133,17 @@
     initSettings();
     initAuth();
     initCardFilters();
+    initFeedTabs();
     updateGamificationUI();
 
     // Initialize Lucide icons
     lucide.createIcons();
 
     // Load data
-    await initData();
-
-    startTimers();
-
-    showToast("OSRS Flipit2 loaded — Prices updated!", "gold", 3000);
+    initData().then(function () {
+      startTimers();
+      showToast("OSRS Flipit2 loaded — Prices updated!", "gold", 3000);
+    });
   }
 
   // Start
