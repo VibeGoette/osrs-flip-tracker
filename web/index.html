@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!--
+  ____                _           _ _         
+ |  _ \ ___ _ __ _ __| | _____  _(_) |_ _   _ 
+ | |_) / _ \ '__| '__| |/ _ \ \/ / | __| | | |
+ |  __/  __/ |  | |  | |  __/>  <| | |_| |_| |
+ |_|   \___|_|  |_|  |_|\___/_/\_\_|\__|\__, |
+                                         |___/ 
+  ____                            _            
+ / ___|___  _ __ ___  _ __  _   _| |_ ___ _ __ 
+| |   / _ \| '_ ` _ \| '_ \| | | | __/ _ \ '__|
+| |__| (_) | | | | | | |_) | |_| | ||  __/ |   
+ \____\___/|_| |_| |_| .__/ \__,_|\__\___|_|   
+                      |_|                        
+  Built with Perplexity Computer
+  https://www.perplexity.ai/computer
+-->
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="OSRS Flipit2 - Grand Exchange Flipping Companion for Old School RuneScape">
+<meta name="creator" content="Perplexity Computer">
+<title>OSRS Flipit2 — GE Flipping Companion</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.js"></script>
+<link rel="stylesheet" href="./style.css">
+<link rel="stylesheet" href="./new-features.css">
+</head>
+<body>
+<!-- Sidebar -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <svg class="logo-svg" viewBox="0 0 32 32" width="32" height="32" aria-label="OSRS Flipit2 Logo">
+      <rect x="2" y="2" width="28" height="28" fill="none" stroke="#ff981f" stroke-width="2"/>
+      <path d="M8 24V12l4-4 4 8 4-8 4 4v12" fill="none" stroke="#ff981f" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="16" cy="8" r="2" fill="#ff981f"/>
+    </svg>
+    <span class="logo-text">OSRS FLIPIT2</span>
+  </div>
+  <nav class="sidebar-nav" id="sidebarNav">
+    <a href="#cards" class="nav-item active" data-page="cards">
+      <i data-lucide="clipboard-list"></i><span>Flip Feed</span>
+    </a>
+    <a href="#scanner" class="nav-item" data-page="scanner">
+      <i data-lucide="scan-search"></i><span>Scanner</span>
+    </a>
+    <a href="#calculator" class="nav-item" data-page="calculator">
+      <i data-lucide="calculator"></i><span>Calculator</span>
+    </a>
+    <a href="#alarms" class="nav-item" data-page="alarms">
+      <i data-lucide="bell"></i><span>Alarms</span><span class="alarm-badge" id="alarmBadge" style="display:none">0</span>
+    </a>
+    <a href="#watchlist" class="nav-item" data-page="watchlist">
+      <i data-lucide="star"></i><span>Watchlist</span>
+    </a>
+    <a href="#stats" class="nav-item" data-page="stats">
+      <i data-lucide="bar-chart-3"></i><span>Stats</span>
+    </a>
+    <a href="#guides" class="nav-item" data-page="guides">
+      <i data-lucide="book-open"></i><span>Guides</span>
+    </a>
+    <a href="#blog" class="nav-item" data-page="blog">
+      <i data-lucide="newspaper"></i><span>Blog</span>
+    </a>
+    <div class="nav-spacer"></div>
+    <a href="#settings" class="nav-item" data-page="settings">
+      <i data-lucide="settings"></i><span>Settings</span>
+    </a>
+  </nav>
+</aside>
+
+<!-- Overlay for mobile sidebar -->
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+<!-- Main Content -->
+<div class="main-wrapper">
+  <!-- Header -->
+  <header class="app-header" id="appHeader">
+    <div class="header-left">
+      <button class="header-btn sidebar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">
+        <i data-lucide="menu"></i>
+      </button>
+      <svg class="logo-svg-sm" viewBox="0 0 32 32" width="24" height="24" aria-label="Logo">
+        <rect x="2" y="2" width="28" height="28" fill="none" stroke="#ff981f" stroke-width="2"/>
+        <path d="M8 24V12l4-4 4 8 4-8 4 4v12" fill="none" stroke="#ff981f" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+        <circle cx="16" cy="8" r="2" fill="#ff981f"/>
+      </svg>
+      <span class="header-title">OSRS FLIPIT2</span>
+    </div>
+    <div class="header-right">
+      <div class="gamification-bar">
+        <div class="karma-badge" title="Karma Gold">
+          <svg viewBox="0 0 16 16" width="16" height="16"><circle cx="8" cy="8" r="7" fill="#ff981f"/><text x="8" y="11" text-anchor="middle" font-size="9" font-weight="bold" fill="#0e0e0e">G</text></svg>
+          <span id="headerKarmaGold">0</span>
+        </div>
+        <div class="level-badge" title="Level">
+          <span class="level-label">Lv</span>
+          <span id="headerLevel">1</span>
+          <div class="mini-exp-bar"><div class="mini-exp-fill" id="headerExpFill" style="width:0%"></div></div>
+        </div>
+      </div>
+      <!-- Pro/Free badge -->
+      <div class="tier-badge" id="tierBadge" title="Account tier"></div>
+      <div class="api-timer" id="apiTimer" title="Next API refresh">
+        <i data-lucide="refresh-cw" class="spin-icon"></i>
+        <span id="apiTimerText">60s</span>
+      </div>
+      <button class="header-btn auth-btn" id="authBtn" title="Account">
+        <i data-lucide="user"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Page Container -->
+  <main class="page-container" id="pageContainer">
+
+    <!-- FLIP FEED PAGE (was Task Cards) -->
+    <section class="page" id="page-cards">
+      <!-- Auth gate overlay -->
+      <div class="feed-auth-gate" id="feedAuthGate" style="display:none">
+        <div class="feed-auth-gate-inner">
+          <i data-lucide="lock" class="gate-icon"></i>
+          <h2>Login to Access Flip Feed</h2>
+          <p>Create a free account to see Smart Flips and Random Flips.</p>
+          <div class="gate-buttons">
+            <button class="btn btn-primary" id="gateLoginBtn"><i data-lucide="log-in"></i> Login</button>
+            <button class="btn btn-secondary" id="gateRegisterBtn"><i data-lucide="user-plus"></i> Register</button>
+          </div>
+          <p class="gate-note">All other features (Scanner, Calculator, Guides, Watchlist, etc.) are available without login.</p>
+        </div>
+      </div>
+
+      <div class="page-header">
+        <h1 class="page-title">Flip Feed</h1>
+        <button class="btn btn-primary" id="newCardBtn"><i data-lucide="plus"></i> New Card</button>
+      </div>
+      <div class="feed-tabs" id="feedTabs">
+        <button class="feed-tab active" data-tab="smart"><i data-lucide="sparkles"></i> Smart Flips</button>
+        <button class="feed-tab" data-tab="random"><i data-lucide="shuffle"></i> Random Flips</button>
+        <button class="feed-tab" data-tab="active"><i data-lucide="zap"></i> Active <span class="feed-tab-count" id="activeTabCount">0</span></button>
+        <button class="feed-tab" data-tab="history"><i data-lucide="history"></i> History</button>
+      </div>
+
+      <!-- Smart Flips Panel -->
+      <div class="feed-panel" id="feedSmart">
+        <!-- Free tier usage bar -->
+        <div class="free-tier-bar" id="smartFreeTierBar" style="display:none">
+          <span id="smartFreeTierText">20/20 free cards remaining today</span>
+          <span class="free-tier-refreshes" id="smartFreeRefreshesText"></span>
+        </div>
+        <div class="feed-panel-header">
+          <p class="feed-panel-desc">Top smart flip suggestions scored by profit, volume &amp; price efficiency.</p>
+        </div>
+        <!-- Smart Flips Filter/Sort Bar -->
+        <div class="smart-filter-bar" id="smartFilterBar">
+          <div class="smart-filter-group">
+            <label class="filter-label">Min Volume: <span id="smartVolumeVal">50</span></label>
+            <input type="range" id="smartVolumeSlider" class="range-slider" min="0" max="5000" step="10" value="50">
+          </div>
+          <div class="smart-filter-group">
+            <label class="filter-label">Sort by:</label>
+            <select id="smartSortSelect" class="filter-select">
+              <option value="score">Smart Score</option>
+              <option value="afterTax">Highest Margin</option>
+              <option value="roi">Highest ROI</option>
+              <option value="volume">Highest Volume</option>
+              <option value="buy">Lowest Buy-In</option>
+              <option value="recent">Recently Traded</option>
+            </select>
+          </div>
+          <div class="smart-filter-group filter-toggle-group">
+            <label class="filter-toggle-label">
+              <input type="checkbox" id="smartRecentlyTraded" class="filter-checkbox">
+              <span class="filter-toggle-text"><i data-lucide="clock"></i> Recently Traded Only</span>
+            </label>
+          </div>
+        </div>
+        <div class="feed-cards-grid" id="smartFlipsGrid">
+          <div class="empty-state" id="smartFlipsEmpty">
+            <i data-lucide="sparkles" class="empty-icon"></i>
+            <h3>Loading Smart Flips...</h3>
+            <p>Waiting for market data to generate suggestions.</p>
+          </div>
+        </div>
+        <!-- Free tier upgrade prompt -->
+        <div class="upgrade-overlay" id="smartUpgradeOverlay" style="display:none">
+          <div class="upgrade-prompt">
+            <i data-lucide="lock"></i>
+            <h3>Daily Limit Reached</h3>
+            <p id="smartUpgradeText">You've viewed all your free cards for today.</p>
+            <p class="upgrade-reset-text" id="smartResetText"></p>
+            <button class="btn btn-primary" id="smartUpgradeBtn"><i data-lucide="crown"></i> Upgrade to Pro</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Random Flips Panel -->
+      <div class="feed-panel" id="feedRandom" style="display:none">
+        <!-- Free tier usage bar -->
+        <div class="free-tier-bar" id="randomFreeTierBar" style="display:none">
+          <span id="randomFreeTierText">20/20 free cards remaining today</span>
+          <span class="free-tier-refreshes" id="randomFreeRefreshesText"></span>
+        </div>
+        <div class="feed-panel-header">
+          <p class="feed-panel-desc">5 random profitable items — try your luck!</p>
+          <button class="btn btn-secondary" id="shuffleRandomBtn"><i data-lucide="shuffle"></i> Shuffle</button>
+        </div>
+        <!-- Random Flips Volume Slider -->
+        <div class="smart-filter-bar" id="randomFilterBar">
+          <div class="smart-filter-group">
+            <label class="filter-label">Min Volume: <span id="randomVolumeVal">0</span></label>
+            <input type="range" id="randomVolumeSlider" class="range-slider" min="0" max="5000" step="10" value="0">
+          </div>
+        </div>
+        <div class="feed-cards-grid" id="randomFlipsGrid">
+          <div class="empty-state" id="randomFlipsEmpty">
+            <i data-lucide="shuffle" class="empty-icon"></i>
+            <h3>Loading Random Flips...</h3>
+            <p>Waiting for market data.</p>
+          </div>
+        </div>
+        <!-- Free tier upgrade prompt -->
+        <div class="upgrade-overlay" id="randomUpgradeOverlay" style="display:none">
+          <div class="upgrade-prompt">
+            <i data-lucide="lock"></i>
+            <h3>Daily Limit Reached</h3>
+            <p id="randomUpgradeText">You've viewed all your free cards for today.</p>
+            <p class="upgrade-reset-text" id="randomResetText"></p>
+            <button class="btn btn-primary" id="randomUpgradeBtn"><i data-lucide="crown"></i> Upgrade to Pro</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Active Flips Panel -->
+      <div class="feed-panel" id="feedActive" style="display:none">
+        <div class="filter-bar" id="cardsFilterBar">
+          <button class="filter-pill active" data-filter="all">All</button>
+          <button class="filter-pill" data-filter="active">Active</button>
+          <button class="filter-pill" data-filter="completed">Completed</button>
+          <button class="filter-pill" data-filter="expired">Expired</button>
+        </div>
+        <div class="cards-grid" id="cardsGrid">
+          <div class="empty-state" id="cardsEmpty">
+            <i data-lucide="clipboard-list" class="empty-icon"></i>
+            <h3>No Task Cards Yet</h3>
+            <p>Create your first flip task card or pick a Smart Flip suggestion.</p>
+            <button class="btn btn-primary" id="newCardBtnEmpty"><i data-lucide="plus"></i> Create Card</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- History Panel -->
+      <div class="feed-panel" id="feedHistory" style="display:none">
+        <div class="history-summary" id="historySummary">
+          <div class="history-kpi">
+            <span class="history-kpi-label">Total Profit</span>
+            <span class="history-kpi-value profit-text" id="histTotalProfit">0 GP</span>
+          </div>
+          <div class="history-kpi">
+            <span class="history-kpi-label">Flips Done</span>
+            <span class="history-kpi-value" id="histFlipsDone">0</span>
+          </div>
+          <div class="history-kpi">
+            <span class="history-kpi-label">Avg ROI</span>
+            <span class="history-kpi-value" id="histAvgROI">0%</span>
+          </div>
+          <div class="history-kpi">
+            <span class="history-kpi-label">Total Tax Paid</span>
+            <span class="history-kpi-value" id="histTotalTax">0 GP</span>
+          </div>
+          <div class="history-kpi">
+            <span class="history-kpi-label">Best Flip</span>
+            <span class="history-kpi-value profit-text" id="histBestFlip">—</span>
+          </div>
+          <div class="history-kpi">
+            <span class="history-kpi-label">Karma Gold Earned</span>
+            <span class="history-kpi-value" id="histKarmaGold">0</span>
+          </div>
+        </div>
+        <div class="history-actions-bar">
+          <button class="btn btn-danger btn-sm" id="clearHistoryBtn"><i data-lucide="trash-2"></i> Clear History</button>
+        </div>
+        <div class="history-list" id="historyList">
+          <div class="empty-state" id="historyEmpty">
+            <i data-lucide="history" class="empty-icon"></i>
+            <h3>No History Yet</h3>
+            <p>Complete a flip to see it here.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ITEM DETAIL PAGE (full-page) -->
+    <section class="page" id="page-itemdetail" style="display:none">
+      <div class="itemdetail-header">
+        <button class="btn btn-secondary itemdetail-back" id="itemDetailBackBtn"><i data-lucide="arrow-left"></i> Back</button>
+        <div class="itemdetail-title-row">
+          <img id="itemDetailPageIcon" src="" alt="" class="itemdetail-icon" onerror="this.style.display='none'">
+          <div>
+            <h1 class="itemdetail-name" id="itemDetailPageName">Item Name</h1>
+            <span class="itemdetail-members-badge" id="itemDetailMembersBadge"></span>
+          </div>
+        </div>
+        <div class="itemdetail-header-actions">
+          <div class="refresh-btn-wrap">
+            <button class="btn btn-secondary" id="itemDetailRefreshBtn"><i data-lucide="refresh-cw"></i> Refresh</button>
+            <span class="refresh-countdown" id="itemDetailRefreshCountdown" style="display:none"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="itemdetail-body">
+        <!-- Key stats grid -->
+        <div class="itemdetail-stats-grid" id="itemDetailStatsGrid">
+          <div class="itemdetail-stat">
+            <span class="itemdetail-stat-label">Best Buy-In</span>
+            <span class="itemdetail-stat-value price-buy" id="itemDetailBuy">—</span>
+          </div>
+          <div class="itemdetail-stat">
+            <span class="itemdetail-stat-label">Possible Sell</span>
+            <span class="itemdetail-stat-value price-sell" id="itemDetailSell">—</span>
+          </div>
+          <div class="itemdetail-stat">
+            <span class="itemdetail-stat-label">After Tax</span>
+            <span class="itemdetail-stat-value" id="itemDetailAfterTax">—</span>
+          </div>
+          <div class="itemdetail-stat">
+            <span class="itemdetail-stat-label">ROI%</span>
+            <span class="itemdetail-stat-value" id="itemDetailROI">—</span>
+          </div>
+          <div class="itemdetail-stat">
+            <span class="itemdetail-stat-label">Buy Limit</span>
+            <span class="itemdetail-stat-value" id="itemDetailLimit">—</span>
+          </div>
+          <div class="itemdetail-stat">
+            <span class="itemdetail-stat-label">Max Profit</span>
+            <span class="itemdetail-stat-value profit-text" id="itemDetailMaxProfit">—</span>
+          </div>
+          <div class="itemdetail-stat">
+            <span class="itemdetail-stat-label">High Alch</span>
+            <span class="itemdetail-stat-value" id="itemDetailHighAlch">—</span>
+          </div>
+          <div class="itemdetail-stat">
+            <span class="itemdetail-stat-label">Margin</span>
+            <span class="itemdetail-stat-value" id="itemDetailMargin">—</span>
+          </div>
+        </div>
+
+        <!-- Trend indicators -->
+        <div class="itemdetail-trends" id="itemDetailTrends">
+          <div class="trend-card">
+            <span class="trend-card-label">1-Day Trend</span>
+            <span class="trend-card-value" id="itemDetail1dTrend">—</span>
+          </div>
+          <div class="trend-card">
+            <span class="trend-card-label">7-Day Trend</span>
+            <span class="trend-card-value" id="itemDetail7dTrend"><span class="text-muted">Loading...</span></span>
+          </div>
+        </div>
+
+        <!-- Chart -->
+        <div class="itemdetail-chart-card card">
+          <div class="itemdetail-chart-header">
+            <h3>Price History (7 Days)</h3>
+            <div class="chart-legend">
+              <span class="chart-legend-dot" style="background:#00ff00"></span> Buy
+              <span class="chart-legend-dot" style="background:#ff4444; margin-left:12px"></span> Sell
+            </div>
+          </div>
+          <div class="itemdetail-chart-wrap">
+            <canvas id="itemDetailChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="itemdetail-actions">
+          <button class="btn btn-primary itemdetail-action-btn" id="itemDetailFlipBtn"><i data-lucide="zap"></i> Flip It</button>
+          <button class="btn btn-secondary itemdetail-action-btn" id="itemDetailWatchBtn"><i data-lucide="star"></i> Add to Watchlist</button>
+          <button class="btn btn-secondary itemdetail-action-btn" id="itemDetailCalcBtn"><i data-lucide="calculator"></i> Calculator</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- SCANNER PAGE -->
+    <section class="page" id="page-scanner" style="display:none">
+      <div class="page-header">
+        <h1 class="page-title">Market Scanner <span id="scannerItemCount" class="item-count"></span></h1>
+      </div>
+      <div class="scanner-controls">
+        <div class="search-box">
+          <i data-lucide="search"></i>
+          <input type="text" id="scannerSearch" placeholder="Search items...">
+        </div>
+        <div class="filter-bar" id="scannerFilterBar">
+          <button class="filter-pill active" data-filter="all">All</button>
+          <button class="filter-pill" data-filter="best-margins">Best Margins</button>
+          <button class="filter-pill" data-filter="high-volume">High Volume</button>
+          <button class="filter-pill" data-filter="recently-traded">Recently Traded</button>
+          <button class="filter-pill" data-filter="f2p">F2P</button>
+          <button class="filter-pill" data-filter="members">Members</button>
+        </div>
+      </div>
+      <div class="table-container">
+        <table class="data-table" id="scannerTable">
+          <thead>
+            <tr>
+              <th></th>
+              <th class="sortable" data-sort="name">Name <i data-lucide="chevrons-up-down"></i></th>
+              <th class="sortable" data-sort="buy">Best Buy-In <i data-lucide="chevrons-up-down"></i></th>
+              <th class="sortable" data-sort="sell">Possible Sell <i data-lucide="chevrons-up-down"></i></th>
+              <th class="sortable" data-sort="margin">Margin <i data-lucide="chevrons-up-down"></i></th>
+              <th class="sortable" data-sort="afterTax">After Tax <i data-lucide="chevrons-up-down"></i></th>
+              <th class="sortable" data-sort="roi">ROI% <i data-lucide="chevrons-up-down"></i></th>
+              <th class="sortable" data-sort="volume">Volume <i data-lucide="chevrons-up-down"></i></th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="scannerBody">
+          </tbody>
+        </table>
+        <div class="skeleton-loader" id="scannerSkeleton">
+          <div class="skeleton-row"></div><div class="skeleton-row"></div><div class="skeleton-row"></div>
+          <div class="skeleton-row"></div><div class="skeleton-row"></div><div class="skeleton-row"></div>
+          <div class="skeleton-row"></div><div class="skeleton-row"></div><div class="skeleton-row"></div>
+          <div class="skeleton-row"></div>
+        </div>
+      </div>
+      <button class="btn btn-secondary load-more" id="scannerLoadMore" style="display:none">Load More</button>
+    </section>
+
+    <!-- CALCULATOR PAGE -->
+    <section class="page" id="page-calculator" style="display:none">
+      <div class="page-header">
+        <h1 class="page-title">GE Tax Calculator</h1>
+      </div>
+      <div class="calc-layout">
+        <div class="calc-inputs card">
+          <h3>Input</h3>
+          <div class="form-group">
+            <label>Item Search</label>
+            <div class="search-box">
+              <i data-lucide="search"></i>
+              <input type="text" id="calcItemSearch" placeholder="Search item..." autocomplete="off">
+            </div>
+            <div class="autocomplete-dropdown" id="calcAutocomplete"></div>
+          </div>
+          <div class="form-group">
+            <label>Buy Price (GP)</label>
+            <input type="number" id="calcBuyPrice" placeholder="0" class="form-input">
+          </div>
+          <div class="form-group">
+            <label>Sell Price (GP)</label>
+            <input type="number" id="calcSellPrice" placeholder="0" class="form-input">
+          </div>
+          <div class="form-group">
+            <label>Quantity</label>
+            <input type="number" id="calcQuantity" placeholder="1" value="1" class="form-input">
+          </div>
+          <button class="btn btn-primary calc-btn" id="calcBtn">Calculate</button>
+        </div>
+        <div class="calc-results card" id="calcResults">
+          <h3>Results</h3>
+          <div class="result-grid">
+            <div class="result-item"><span class="result-label">Tax per unit</span><span class="result-value" id="resTaxUnit">—</span></div>
+            <div class="result-item"><span class="result-label">Gross margin</span><span class="result-value" id="resGrossMargin">—</span></div>
+            <div class="result-item"><span class="result-label">Net profit/unit</span><span class="result-value" id="resNetUnit">—</span></div>
+            <div class="result-item"><span class="result-label">Total profit</span><span class="result-value" id="resTotalProfit">—</span></div>
+            <div class="result-item"><span class="result-label">Total tax</span><span class="result-value" id="resTotalTax">—</span></div>
+            <div class="result-item"><span class="result-label">ROI%</span><span class="result-value" id="resROI">—</span></div>
+            <div class="result-item"><span class="result-label">Break-even sell</span><span class="result-value" id="resBreakeven">—</span></div>
+            <div class="result-item"><span class="result-label">GE Buy Limit</span><span class="result-value" id="resBuyLimit">—</span></div>
+            <div class="result-item"><span class="result-label">Max profit at limit</span><span class="result-value" id="resMaxProfit">—</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ALARMS PAGE -->
+    <section class="page" id="page-alarms" style="display:none">
+      <div class="page-header">
+        <h1 class="page-title">Buy Limit Alarms</h1>
+        <button class="btn btn-secondary" id="clearAllAlarms">Clear All</button>
+      </div>
+      <div class="alarms-list" id="alarmsList">
+        <div class="empty-state" id="alarmsEmpty">
+          <i data-lucide="bell-off" class="empty-icon"></i>
+          <h3>No Active Alarms</h3>
+          <p>Set a buy limit alarm on any Task Card to track when you can flip again.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- WATCHLIST PAGE -->
+    <section class="page" id="page-watchlist" style="display:none">
+      <div class="page-header">
+        <h1 class="page-title">Watchlist</h1>
+        <button class="btn btn-primary" id="addWatchlistBtn"><i data-lucide="plus"></i> Add Item</button>
+      </div>
+      <div class="watchlist-grid" id="watchlistGrid">
+        <div class="empty-state" id="watchlistEmpty">
+          <i data-lucide="star" class="empty-icon"></i>
+          <h3>Watchlist Empty</h3>
+          <p>Add items from the Scanner to track their prices.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- STATS PAGE -->
+    <section class="page" id="page-stats" style="display:none">
+      <div class="page-header">
+        <h1 class="page-title">Stats &amp; Gamification</h1>
+      </div>
+      <div class="stats-kpi-grid" id="statsKPIs">
+        <div class="kpi-card">
+          <span class="kpi-label">Total Profit</span>
+          <span class="kpi-value" id="statTotalProfit">0 GP</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">Avg ROI</span>
+          <span class="kpi-value" id="statAvgROI">0%</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">Flips Done</span>
+          <span class="kpi-value" id="statFlipsDone">0</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">Tax Paid</span>
+          <span class="kpi-value" id="statTaxPaid">0 GP</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">Session Time</span>
+          <span class="kpi-value" id="statSessionTime">0m</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">Profit/Hour</span>
+          <span class="kpi-value" id="statProfitHour">0 GP</span>
+        </div>
+      </div>
+      <div class="stats-gamification">
+        <div class="card gamification-card">
+          <h3>Gamification</h3>
+          <div class="gamification-stats">
+            <div class="gami-stat">
+              <svg viewBox="0 0 16 16" width="24" height="24"><circle cx="8" cy="8" r="7" fill="#ff981f"/><text x="8" y="11" text-anchor="middle" font-size="9" font-weight="bold" fill="#0e0e0e">G</text></svg>
+              <div>
+                <span class="gami-label">Karma Gold</span>
+                <span class="gami-value" id="statKarmaGold">0</span>
+              </div>
+            </div>
+            <div class="gami-stat">
+              <i data-lucide="swords" class="gami-icon"></i>
+              <div>
+                <span class="gami-label">Level</span>
+                <span class="gami-value" id="statLevel">1 — Novice</span>
+              </div>
+            </div>
+            <div class="gami-stat">
+              <i data-lucide="sparkles" class="gami-icon"></i>
+              <div>
+                <span class="gami-label">Total EXP</span>
+                <span class="gami-value" id="statTotalExp">0</span>
+              </div>
+            </div>
+            <div class="gami-stat">
+              <i data-lucide="check-square" class="gami-icon"></i>
+              <div>
+                <span class="gami-label">Cards Completed</span>
+                <span class="gami-value" id="statCardsCompleted">0</span>
+              </div>
+            </div>
+          </div>
+          <div class="exp-bar-large">
+            <div class="exp-bar-label">EXP to next level: <span id="statExpNext">200</span></div>
+            <div class="exp-bar-track"><div class="exp-bar-fill" id="statExpFill" style="width:0%"></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="stats-chart-section card">
+        <h3>Profit Over Time</h3>
+        <canvas id="profitChart" height="250"></canvas>
+      </div>
+    </section>
+
+    <!-- GUIDES PAGE -->
+    <section class="page" id="page-guides" style="display:none">
+      <div class="page-header">
+        <h1 class="page-title">Flipping Guides</h1>
+      </div>
+      <div class="guides-tabs">
+        <button class="filter-pill active" data-guide="101">Flipping 101</button>
+        <button class="filter-pill" data-guide="first">Your First Flip</button>
+        <button class="filter-pill" data-guide="limits">Buy Limits</button>
+        <button class="filter-pill" data-guide="advanced">Advanced Tips</button>
+      </div>
+      <div class="guide-content card" id="guideContent"></div>
+    </section>
+
+    <!-- BLOG PAGE -->
+    <section class="page" id="page-blog" style="display:none">
+      <div class="page-header">
+        <h1 class="page-title">Blog</h1>
+      </div>
+      <div class="blog-list" id="blogList">
+        <div class="empty-state" id="blogEmpty">
+          <i data-lucide="newspaper" class="empty-icon"></i>
+          <h3>No Posts Yet</h3>
+          <p>Check back soon for flipping tips and market analysis.</p>
+        </div>
+      </div>
+      <div class="blog-post-view" id="blogPostView" style="display:none">
+        <button class="btn btn-secondary blog-back" id="blogBackBtn"><i data-lucide="arrow-left"></i> Back</button>
+        <article class="blog-article card" id="blogArticle"></article>
+      </div>
+    </section>
+
+    <!-- ADMIN PAGE -->
+    <section class="page" id="page-admin" style="display:none">
+      <div class="page-header">
+        <h1 class="page-title">Admin Dashboard</h1>
+      </div>
+      <div class="admin-auth" id="adminAuth">
+        <div class="card admin-login-card">
+          <h3>Admin Access</h3>
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="adminPassword" class="form-input" placeholder="Enter admin password">
+          </div>
+          <button class="btn btn-primary" id="adminLoginBtn">Login</button>
+          <p class="admin-error" id="adminError" style="display:none">Incorrect password.</p>
+        </div>
+      </div>
+      <div class="admin-panel" id="adminPanel" style="display:none">
+        <!-- Free Tier Config -->
+        <div class="card admin-editor" style="margin-bottom:24px">
+          <h3>Free Tier Config</h3>
+          <div class="admin-freetier-grid">
+            <div class="form-group">
+              <label>Daily Card Limit (free users)</label>
+              <input type="number" id="adminDailyLimit" class="form-input" value="20" min="1" max="1000">
+            </div>
+            <div class="form-group">
+              <label>Refreshes per Window</label>
+              <input type="number" id="adminRefreshesPerWindow" class="form-input" value="2" min="1" max="100">
+            </div>
+            <div class="form-group">
+              <label>Refresh Window (hours)</label>
+              <input type="number" id="adminRefreshWindowHours" class="form-input" value="4" min="1" max="24">
+            </div>
+          </div>
+          <button class="btn btn-primary" id="adminSaveFreeTierBtn"><i data-lucide="save"></i> Save Config</button>
+        </div>
+        <div class="admin-editor card">
+          <h3>Blog Post Editor</h3>
+          <div class="form-group">
+            <label>Title</label>
+            <input type="text" id="adminPostTitle" class="form-input" placeholder="Post title...">
+          </div>
+          <div class="admin-editor-layout">
+            <div class="form-group admin-textarea-group">
+              <label>Markdown Content</label>
+              <textarea id="adminPostContent" class="form-textarea" placeholder="Write your post in Markdown..."></textarea>
+            </div>
+            <div class="form-group admin-preview-group">
+              <label>Preview</label>
+              <div class="admin-preview card" id="adminPreview"></div>
+            </div>
+          </div>
+          <div class="admin-actions">
+            <button class="btn btn-primary" id="adminPublishBtn"><i data-lucide="send"></i> Publish</button>
+            <button class="btn btn-secondary" id="adminClearBtn">Clear</button>
+          </div>
+        </div>
+        <div class="admin-posts card">
+          <h3>Published Posts</h3>
+          <div id="adminPostsList"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SETTINGS PAGE -->
+    <section class="page" id="page-settings" style="display:none">
+      <div class="page-header">
+        <h1 class="page-title">Settings</h1>
+      </div>
+      <div class="settings-sections">
+        <div class="card settings-section">
+          <h3>Profile</h3>
+          <div class="form-group">
+            <label>Display Name</label>
+            <input type="text" id="settingsName" class="form-input" placeholder="Adventurer">
+          </div>
+        </div>
+        <div class="card settings-section">
+          <h3>RuneLite Integration</h3>
+          <div class="form-group">
+            <label>API Key</label>
+            <div class="api-key-row">
+              <input type="text" id="settingsApiKey" class="form-input" readonly placeholder="Click Generate">
+              <button class="btn btn-secondary" id="generateApiKey">Generate</button>
+            </div>
+          </div>
+        </div>
+        <div class="card settings-section">
+          <h3>Gamification</h3>
+          <div class="settings-info-grid">
+            <span>Karma Gold:</span><span id="settingsKarma">0</span>
+            <span>Total EXP:</span><span id="settingsExp">0</span>
+            <span>Level:</span><span id="settingsLevel">1 — Novice</span>
+          </div>
+        </div>
+        <div class="card settings-section">
+          <h3>Appearance</h3>
+          <p class="text-muted">RuneScape dark theme — always on. The way Gielinor was meant to be seen.</p>
+        </div>
+        <div class="card settings-section">
+          <h3>Data</h3>
+          <div class="settings-btn-row">
+            <button class="btn btn-secondary" id="exportJsonBtn">Export JSON</button>
+            <button class="btn btn-secondary" id="exportCsvBtn">Export CSV</button>
+            <button class="btn btn-secondary" id="importBtn">Import</button>
+            <button class="btn btn-danger" id="clearAllBtn">Clear All</button>
+          </div>
+          <input type="file" id="importFileInput" style="display:none" accept=".json">
+        </div>
+        <div class="card settings-section">
+          <h3>About</h3>
+          <p class="text-muted">OSRS Flipit2 v2.0 — Grand Exchange Flipping Companion</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="app-footer">
+    OSRS Flipit2 v2.0 · Not affiliated with Jagex Ltd. · <a href="https://www.perplexity.ai/computer" target="_blank" rel="noopener noreferrer">Created with Perplexity Computer</a>
+  </footer>
+</div>
+
+<!-- MODALS -->
+
+<!-- New Card Modal -->
+<div class="modal-overlay" id="newCardModal" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>New Task Card</h2>
+      <button class="modal-close" id="closeNewCardModal"><i data-lucide="x"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Item Search</label>
+        <div class="search-box">
+          <i data-lucide="search"></i>
+          <input type="text" id="cardItemSearch" placeholder="Search item..." autocomplete="off">
+        </div>
+        <div class="autocomplete-dropdown" id="cardAutocomplete"></div>
+      </div>
+      <div class="modal-item-info" id="cardItemInfo" style="display:none">
+        <img id="cardItemIcon" src="" alt="" class="item-icon-lg">
+        <div>
+          <div class="item-name-lg" id="cardItemName"></div>
+          <div class="item-limit-info" id="cardItemLimit"></div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Buy Price (GP)</label>
+          <input type="number" id="cardBuyPrice" class="form-input" placeholder="0">
+        </div>
+        <div class="form-group">
+          <label>Sell Price (GP)</label>
+          <input type="number" id="cardSellPrice" class="form-input" placeholder="0">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Quantity</label>
+          <input type="number" id="cardQuantity" class="form-input" placeholder="1" value="1">
+        </div>
+        <div class="form-group">
+          <label>Timer</label>
+          <select id="cardTimer" class="form-input">
+            <option value="15">15 minutes</option>
+            <option value="30" selected>30 minutes</option>
+            <option value="60">1 hour</option>
+            <option value="120">2 hours</option>
+            <option value="240">4 hours</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group" id="customTimerGroup" style="display:none">
+        <label>Custom Timer (minutes)</label>
+        <input type="number" id="cardCustomTimer" class="form-input" placeholder="60">
+      </div>
+      <div class="card-preview-stats">
+        <div class="preview-stat"><span>Gold Needed:</span><span id="cardGoldNeeded">0 GP</span></div>
+        <div class="preview-stat"><span>Est. Profit (after tax):</span><span id="cardEstProfit" class="profit-text">0 GP</span></div>
+        <div class="preview-stat"><span>ROI:</span><span id="cardEstROI">0%</span></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="cancelNewCard">Cancel</button>
+      <button class="btn btn-primary" id="createCardBtn">Create Card</button>
+    </div>
+  </div>
+</div>
+
+<!-- Watchlist Add Modal -->
+<div class="modal-overlay" id="watchlistModal" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Add to Watchlist</h2>
+      <button class="modal-close" id="closeWatchlistModal"><i data-lucide="x"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Item Search</label>
+        <div class="search-box">
+          <i data-lucide="search"></i>
+          <input type="text" id="watchlistItemSearch" placeholder="Search item..." autocomplete="off">
+        </div>
+        <div class="autocomplete-dropdown" id="watchlistAutocomplete"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="cancelWatchlist">Cancel</button>
+      <button class="btn btn-primary" id="addWatchlistConfirm">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- Auth Modal -->
+<div class="modal-overlay" id="authModal" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="authModalTitle">Login</h2>
+      <button class="modal-close" id="closeAuthModal"><i data-lucide="x"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="auth-tabs">
+        <button class="filter-pill active" id="authLoginTab">Login</button>
+        <button class="filter-pill" id="authRegisterTab">Register</button>
+      </div>
+      <div id="authLoginForm">
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" id="loginUsername" class="form-input" placeholder="Username">
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="loginPassword" class="form-input" placeholder="Password">
+        </div>
+        <button class="btn btn-primary auth-submit" id="loginBtn">Login</button>
+      </div>
+      <div id="authRegisterForm" style="display:none">
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" id="registerUsername" class="form-input" placeholder="Username">
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="registerPassword" class="form-input" placeholder="Password">
+        </div>
+        <button class="btn btn-primary auth-submit" id="registerBtn">Register</button>
+      </div>
+      <div class="auth-divider"><span>or</span></div>
+      <button class="btn btn-secondary auth-guest" id="guestBtn">Continue as Guest</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- Mobile Bottom Nav -->
+<nav class="mobile-nav" id="mobileNav">
+  <a href="#cards" class="mobile-nav-item active" data-page="cards">
+    <i data-lucide="clipboard-list"></i><span>Feed</span>
+  </a>
+  <a href="#scanner" class="mobile-nav-item" data-page="scanner">
+    <i data-lucide="scan-search"></i><span>Scanner</span>
+  </a>
+  <a href="#calculator" class="mobile-nav-item" data-page="calculator">
+    <i data-lucide="calculator"></i><span>Calc</span>
+  </a>
+  <a href="#alarms" class="mobile-nav-item" data-page="alarms">
+    <i data-lucide="bell"></i><span>Alarms</span>
+    <span class="alarm-badge mobile-alarm-badge" id="mobileAlarmBadge" style="display:none">0</span>
+  </a>
+  <a href="#stats" class="mobile-nav-item" data-page="stats">
+    <i data-lucide="bar-chart-3"></i><span>Stats</span>
+  </a>
+</nav>
+
+<script src="./app.js"></script>
+</body>
+</html>
