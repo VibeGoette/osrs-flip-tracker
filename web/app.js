@@ -94,7 +94,7 @@
 
   // ========== HELPERS ==========
   function formatGP(n) {
-    if (n == null || isNaN(n)) return "\u2014";
+    if (n == null || isNaN(n)) return "—";
     var abs = Math.abs(n);
     var sign = n < 0 ? "-" : "";
     if (abs >= 1e9) return sign + (abs / 1e9).toFixed(1) + "B";
@@ -104,7 +104,7 @@
   }
 
   function formatGPFull(n) {
-    if (n == null || isNaN(n)) return "\u2014";
+    if (n == null || isNaN(n)) return "—";
     return n.toLocaleString() + " GP";
   }
 
@@ -529,15 +529,15 @@
   }
 
   function getTrendHtml(trend) {
-    if (trend === "up") return '<span class="trend-up">\u2191 Up</span>';
-    if (trend === "down") return '<span class="trend-down">\u2193 Down</span>';
-    return '<span class="trend-neutral">\u2192 Flat</span>';
+    if (trend === "up") return '<span class="trend-up">↑ Up</span>';
+    if (trend === "down") return '<span class="trend-down">↓ Down</span>';
+    return '<span class="trend-neutral">→ Flat</span>';
   }
 
   function getTrendBadgeHtml(trend, label) {
-    if (trend === "up") return '<span class="feed-trend-badge trend-up">1D \u2191</span>';
-    if (trend === "down") return '<span class="feed-trend-badge trend-down">1D \u2193</span>';
-    return '<span class="feed-trend-badge trend-neutral">1D \u2192</span>';
+    if (trend === "up") return '<span class="feed-trend-badge trend-up">1D ↑</span>';
+    if (trend === "down") return '<span class="feed-trend-badge trend-down">1D ↓</span>';
+    return '<span class="feed-trend-badge trend-neutral">1D →</span>';
   }
 
   // ========== ROUTING ==========
@@ -903,7 +903,7 @@
       '</div>' +
       '<div class="feed-card-trend-row">' +
         trendBadge +
-        '<span class="feed-card-7d-badge trend-neutral">7D \u2014</span>' +
+        '<span class="feed-card-7d-badge trend-neutral">7D —</span>' +
       '</div>' +
       '<div class="feed-card-profit-row">' +
         '<div><span class="feed-card-profit-label">Potential Profit at Limit</span></div>' +
@@ -1071,8 +1071,8 @@
       setEl("itemDetailROI", roi.toFixed(1) + "%");
       setElClass("itemDetailROI", "itemdetail-stat-value " + (roi > 0 ? "positive" : "negative"));
       setEl("itemDetailLimit", limit > 0 ? limit.toLocaleString() : "Unknown");
-      setEl("itemDetailMaxProfit", maxProfit > 0 ? formatGP(maxProfit) : "\u2014");
-      setEl("itemDetailHighAlch", item.highalch ? formatGP(item.highalch) : "\u2014");
+      setEl("itemDetailMaxProfit", maxProfit > 0 ? formatGP(maxProfit) : "—");
+      setEl("itemDetailHighAlch", item.highalch ? formatGP(item.highalch) : "—");
       setEl("itemDetailMargin", formatGP(margin));
     }
 
@@ -1181,7 +1181,7 @@
     // Load 7-day timeseries with 6h timestep (~28 data points)
     loadTimeseries(itemId, "6h").then(function (data) {
       if (!data || data.length === 0) {
-        if (trend7dEl) trend7dEl.innerHTML = '<span class="text-muted">\u2014</span>';
+        if (trend7dEl) trend7dEl.innerHTML = '<span class="text-muted">—</span>';
         return;
       }
 
@@ -1197,7 +1197,7 @@
           else trend7d = "neutral";
           if (trend7dEl) trend7dEl.innerHTML = getTrendHtml(trend7d);
         } else {
-          if (trend7dEl) trend7dEl.innerHTML = '<span class="text-muted">\u2014</span>';
+          if (trend7dEl) trend7dEl.innerHTML = '<span class="text-muted">—</span>';
         }
       }
 
@@ -1550,7 +1550,7 @@
     document.getElementById("histFlipsDone").textContent = state.flipHistory.length;
     document.getElementById("histAvgROI").textContent = avgROI + "%";
     document.getElementById("histTotalTax").textContent = formatGP(totalTax) + " GP";
-    document.getElementById("histBestFlip").textContent = bestFlip > 0 ? formatGP(bestFlip) + " GP" : "\u2014";
+    document.getElementById("histBestFlip").textContent = bestFlip > 0 ? formatGP(bestFlip) + " GP" : "—";
     document.getElementById("histKarmaGold").textContent = totalKarma.toLocaleString();
   }
 
@@ -1886,7 +1886,7 @@
     document.getElementById("resROI").textContent = roi + "%";
     document.getElementById("resBreakeven").textContent = formatGPFull(breakeven);
     document.getElementById("resBuyLimit").textContent = limit > 0 ? limit.toLocaleString() : "Unknown";
-    document.getElementById("resMaxProfit").textContent = limit > 0 ? formatGPFull(maxProfit) : "\u2014";
+    document.getElementById("resMaxProfit").textContent = limit > 0 ? formatGPFull(maxProfit) : "—";
   }
 
   // ========== ALARMS ==========
@@ -2110,7 +2110,7 @@
     document.getElementById("statProfitHour").textContent = formatGP(profitPerHour) + " GP";
 
     document.getElementById("statKarmaGold").textContent = g.karmaGold.toLocaleString();
-    document.getElementById("statLevel").textContent = g.level + " \u2014 " + getLevelName(g.level);
+    document.getElementById("statLevel").textContent = g.level + " — " + getLevelName(g.level);
     document.getElementById("statTotalExp").textContent = g.totalExp.toLocaleString();
     document.getElementById("statCardsCompleted").textContent = g.cardsCompleted;
     document.getElementById("statExpNext").textContent = expToNextLevel(g.totalExp);
@@ -2165,19 +2165,19 @@
   var GUIDES = {
     "101": {
       title: "Flipping 101",
-      content: "<h2>What is Flipping?</h2><p>Flipping is the act of buying items on the Grand Exchange at a low price and selling them at a higher price for profit. It's one of the most reliable money-making methods in OSRS.</p><h2>How the GE Works</h2><p>The Grand Exchange matches buyers and sellers. When you place a buy offer at a certain price, you'll get the item if someone sells at or below your price. The difference between what people buy and sell at is the <strong>margin</strong>.</p><h2>The GE Tax</h2><p>Jagex introduced a 1% tax on all GE sales, capped at 5M GP. This means: <code>Tax = min(sellPrice \u00d7 0.01, 5,000,000)</code>. You need to account for this in your profit calculations.</p><h2>Key Terms</h2><ul><li><strong>Margin</strong> \u2014 The difference between buy and sell price</li><li><strong>Spread</strong> \u2014 Same as margin</li><li><strong>ROI</strong> \u2014 Return on Investment (profit / buy price \u00d7 100)</li><li><strong>Buy Limit</strong> \u2014 Max items you can buy per 4 hours</li><li><strong>Margin Check</strong> \u2014 Buying and selling 1 item to find current prices</li></ul>"
+      content: "<h2>What is Flipping?</h2><p>Flipping is the act of buying items on the Grand Exchange at a low price and selling them at a higher price for profit. It's one of the most reliable money-making methods in OSRS.</p><h2>How the GE Works</h2><p>The Grand Exchange matches buyers and sellers. When you place a buy offer at a certain price, you'll get the item if someone sells at or below your price. The difference between what people buy and sell at is the <strong>margin</strong>.</p><h2>The GE Tax</h2><p>Jagex introduced a 1% tax on all GE sales, capped at 5M GP. This means: <code>Tax = min(sellPrice × 0.01, 5,000,000)</code>. You need to account for this in your profit calculations.</p><h2>Key Terms</h2><ul><li><strong>Margin</strong> — The difference between buy and sell price</li><li><strong>Spread</strong> — Same as margin</li><li><strong>ROI</strong> — Return on Investment (profit / buy price × 100)</li><li><strong>Buy Limit</strong> — Max items you can buy per 4 hours</li><li><strong>Margin Check</strong> — Buying and selling 1 item to find current prices</li></ul>"
     },
     "first": {
       title: "Your First Flip",
-      content: "<h2>Step 1: Pick an Item</h2><p>Use the Scanner to find items with good margins. Start with commonly traded items like <strong>runes</strong>, <strong>food</strong>, or <strong>potions</strong>. These have high volume and stable prices.</p><h2>Step 2: Margin Check</h2><p>Buy 1 of the item at a very high price (instant buy) and sell 1 at a very low price (instant sell). The prices you get show the current margin.</p><h2>Step 3: Place Your Offers</h2><p>Now place a buy offer at the instant sell price and a sell offer at the instant buy price. Wait for them to complete.</p><h2>Step 4: Calculate Profit</h2><p>Your profit per item is: <code>Sell Price - Buy Price - Tax</code>. Use the Calculator page to compute this precisely.</p><h2>Tips for Beginners</h2><ul><li>Start with low-value items to minimize risk</li><li>Always account for the 1% GE tax</li><li>Don't invest all your gold in one item</li><li>Check buy limits \u2014 you can only buy so many per 4 hours</li></ul>"
+      content: "<h2>Step 1: Pick an Item</h2><p>Use the Scanner to find items with good margins. Start with commonly traded items like <strong>runes</strong>, <strong>food</strong>, or <strong>potions</strong>. These have high volume and stable prices.</p><h2>Step 2: Margin Check</h2><p>Buy 1 of the item at a very high price (instant buy) and sell 1 at a very low price (instant sell). The prices you get show the current margin.</p><h2>Step 3: Place Your Offers</h2><p>Now place a buy offer at the instant sell price and a sell offer at the instant buy price. Wait for them to complete.</p><h2>Step 4: Calculate Profit</h2><p>Your profit per item is: <code>Sell Price - Buy Price - Tax</code>. Use the Calculator page to compute this precisely.</p><h2>Tips for Beginners</h2><ul><li>Start with low-value items to minimize risk</li><li>Always account for the 1% GE tax</li><li>Don't invest all your gold in one item</li><li>Check buy limits — you can only buy so many per 4 hours</li></ul>"
     },
     "limits": {
       title: "Buy Limits",
-      content: "<h2>What are Buy Limits?</h2><p>Every item on the GE has a buy limit \u2014 the maximum number you can purchase every 4 hours. This prevents market manipulation and ensures everyone has fair access.</p><h2>Common Buy Limits</h2><ul><li><strong>Runes</strong> \u2014 13,000-25,000</li><li><strong>Food</strong> \u2014 6,000-13,000</li><li><strong>Potions</strong> \u2014 2,000-10,000</li><li><strong>Weapons/Armor</strong> \u2014 8-125</li><li><strong>Rare items</strong> \u2014 2-8</li></ul><h2>4-Hour Timer</h2><p>Your buy limit resets exactly 4 hours after your first purchase. Use the Alarm feature on Task Cards to get notified when you can buy again.</p><h2>Strategy</h2><p>To maximize profit, calculate the max profit at buy limit: <code>Net Profit Per Item \u00d7 Buy Limit</code>. Items with higher limits can generate more total profit even with smaller margins.</p>"
+      content: "<h2>What are Buy Limits?</h2><p>Every item on the GE has a buy limit — the maximum number you can purchase every 4 hours. This prevents market manipulation and ensures everyone has fair access.</p><h2>Common Buy Limits</h2><ul><li><strong>Runes</strong> — 13,000-25,000</li><li><strong>Food</strong> — 6,000-13,000</li><li><strong>Potions</strong> — 2,000-10,000</li><li><strong>Weapons/Armor</strong> — 8-125</li><li><strong>Rare items</strong> — 2-8</li></ul><h2>4-Hour Timer</h2><p>Your buy limit resets exactly 4 hours after your first purchase. Use the Alarm feature on Task Cards to get notified when you can buy again.</p><h2>Strategy</h2><p>To maximize profit, calculate the max profit at buy limit: <code>Net Profit Per Item × Buy Limit</code>. Items with higher limits can generate more total profit even with smaller margins.</p>"
     },
     "advanced": {
       title: "Advanced Tips",
-      content: "<h2>Volume Analysis</h2><p>High-volume items flip faster but usually have smaller margins. Low-volume items can have huge margins but may take hours to sell. Balance is key.</p><h2>Time of Day</h2><p>Prices fluctuate throughout the day. Peak hours (evening EU/US) have the most volume. Off-peak hours often have wider margins but fewer trades.</p><h2>Update Days</h2><p>OSRS updates happen on Wednesdays. Items mentioned in updates can see huge price swings. Plan your flips accordingly.</p><h2>Multiple Flips</h2><p>Run 8 GE slots simultaneously. Diversify across item types to reduce risk. Use Task Cards to track all active flips.</p><h2>Margin Monitoring</h2><p>Margins change constantly. Re-check margins every 15-30 minutes for active items. The Scanner auto-refreshes every 60 seconds.</p><h2>Risk Management</h2><ul><li>Never invest more than 20% of your total gold in one item</li><li>Set stop-losses mentally \u2014 if an item drops 5%, cut your losses</li><li>Avoid items with recent price spikes \u2014 they often crash back</li><li>Keep a cash reserve for opportunities</li></ul>"
+      content: "<h2>Volume Analysis</h2><p>High-volume items flip faster but usually have smaller margins. Low-volume items can have huge margins but may take hours to sell. Balance is key.</p><h2>Time of Day</h2><p>Prices fluctuate throughout the day. Peak hours (evening EU/US) have the most volume. Off-peak hours often have wider margins but fewer trades.</p><h2>Update Days</h2><p>OSRS updates happen on Wednesdays. Items mentioned in updates can see huge price swings. Plan your flips accordingly.</p><h2>Multiple Flips</h2><p>Run 8 GE slots simultaneously. Diversify across item types to reduce risk. Use Task Cards to track all active flips.</p><h2>Margin Monitoring</h2><p>Margins change constantly. Re-check margins every 15-30 minutes for active items. The Scanner auto-refreshes every 60 seconds.</p><h2>Risk Management</h2><ul><li>Never invest more than 20% of your total gold in one item</li><li>Set stop-losses mentally — if an item drops 5%, cut your losses</li><li>Avoid items with recent price spikes — they often crash back</li><li>Keep a cash reserve for opportunities</li></ul>"
     }
   };
 
@@ -2384,7 +2384,7 @@
     var g = state.gamification;
     document.getElementById("settingsKarma").textContent = g.karmaGold.toLocaleString();
     document.getElementById("settingsExp").textContent = g.totalExp.toLocaleString();
-    document.getElementById("settingsLevel").textContent = g.level + " \u2014 " + getLevelName(g.level);
+    document.getElementById("settingsLevel").textContent = g.level + " — " + getLevelName(g.level);
     document.getElementById("settingsName").value = state.auth.username;
   }
 
@@ -2648,7 +2648,7 @@
     // Load data
     initData().then(function () {
       startTimers();
-      showToast("OSRS Flipit2 loaded \u2014 Prices updated!", "gold", 3000);
+      showToast("OSRS Flipit2 loaded — Prices updated!", "gold", 3000);
     });
   }
 
