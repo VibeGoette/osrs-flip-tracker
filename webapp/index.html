@@ -3,14 +3,14 @@
 <head>
 <!--
   ____                _           _ _         
- |  _ \ ___ _ __ _ __| | _____  _(_) |_ _   _ 
- | |_) / _ \| '__| '__| |/ _ \ \/ / | __| | | |
+ |  _ \_ __ _ __| |_ _____  _(_) |_ _   _ 
+ | |_) / _ \ '__| '__| |/ _ \ \/ / | __| | | |
  |  __/  __/ |  | |  | |  __/>  <| | |_| |_| |
  |_|   \___|_|  |_|  |_|\___/_/\_\_|\__|\__, |
                                          |___/ 
   ____                            _            
  / ___|___  _ __ ___  _ __  _   _| |_ ___ _ __ 
-| |   / _ \| '_ ` _ \| '_ \| | | | __/ _ \| '__|
+| |   / _ \| '_ ` _ \| '_ \| | | | __/ _ \ '__|
 | |__| (_) | | | | | | |_) | |_| | ||  __/ |   
  \____\___/|_| |_| |_| .__/ \__,_|\__\___|_|   
                       |_|                        
@@ -42,7 +42,7 @@
   </div>
   <nav class="sidebar-nav" id="sidebarNav">
     <a href="#cards" class="nav-item active" data-page="cards">
-      <i data-lucide="clipboard-list"></i><span>Task Cards</span>
+      <i data-lucide="clipboard-list"></i><span>Flip Feed</span>
     </a>
     <a href="#scanner" class="nav-item" data-page="scanner">
       <i data-lucide="scan-search"></i><span>Scanner</span>
@@ -115,24 +115,103 @@
   <!-- Page Container -->
   <main class="page-container" id="pageContainer">
 
-    <!-- TASK CARDS PAGE -->
+    <!-- FLIP FEED PAGE (was Task Cards) -->
     <section class="page" id="page-cards">
       <div class="page-header">
-        <h1 class="page-title">Task Cards</h1>
+        <h1 class="page-title">Flip Feed</h1>
         <button class="btn btn-primary" id="newCardBtn"><i data-lucide="plus"></i> New Card</button>
       </div>
-      <div class="filter-bar" id="cardsFilterBar">
-        <button class="filter-pill active" data-filter="all">All</button>
-        <button class="filter-pill" data-filter="active">Active</button>
-        <button class="filter-pill" data-filter="completed">Completed</button>
-        <button class="filter-pill" data-filter="expired">Expired</button>
+      <div class="feed-tabs" id="feedTabs">
+        <button class="feed-tab active" data-tab="smart"><i data-lucide="sparkles"></i> Smart Flips</button>
+        <button class="feed-tab" data-tab="random"><i data-lucide="shuffle"></i> Random Flips</button>
+        <button class="feed-tab" data-tab="active"><i data-lucide="zap"></i> Active <span class="feed-tab-count" id="activeTabCount">0</span></button>
+        <button class="feed-tab" data-tab="history"><i data-lucide="history"></i> History</button>
       </div>
-      <div class="cards-grid" id="cardsGrid">
-        <div class="empty-state" id="cardsEmpty">
-          <i data-lucide="clipboard-list" class="empty-icon"></i>
-          <h3>No Task Cards Yet</h3>
-          <p>Create your first flip task card to start tracking profits.</p>
-          <button class="btn btn-primary" id="newCardBtnEmpty"><i data-lucide="plus"></i> Create Card</button>
+
+      <!-- Smart Flips Panel -->
+      <div class="feed-panel" id="feedSmart">
+        <div class="feed-panel-header">
+          <p class="feed-panel-desc">Top 20 smart flip suggestions scored by profit, volume &amp; price efficiency.</p>
+        </div>
+        <div class="feed-cards-grid" id="smartFlipsGrid">
+          <div class="empty-state" id="smartFlipsEmpty">
+            <i data-lucide="sparkles" class="empty-icon"></i>
+            <h3>Loading Smart Flips...</h3>
+            <p>Waiting for market data to generate suggestions.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Random Flips Panel -->
+      <div class="feed-panel" id="feedRandom" style="display:none">
+        <div class="feed-panel-header">
+          <p class="feed-panel-desc">5 random profitable items — try your luck!</p>
+          <button class="btn btn-secondary" id="shuffleRandomBtn"><i data-lucide="shuffle"></i> Shuffle</button>
+        </div>
+        <div class="feed-cards-grid" id="randomFlipsGrid">
+          <div class="empty-state" id="randomFlipsEmpty">
+            <i data-lucide="shuffle" class="empty-icon"></i>
+            <h3>Loading Random Flips...</h3>
+            <p>Waiting for market data.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Active Flips Panel -->
+      <div class="feed-panel" id="feedActive" style="display:none">
+        <div class="filter-bar" id="cardsFilterBar">
+          <button class="filter-pill active" data-filter="all">All</button>
+          <button class="filter-pill" data-filter="active">Active</button>
+          <button class="filter-pill" data-filter="completed">Completed</button>
+          <button class="filter-pill" data-filter="expired">Expired</button>
+        </div>
+        <div class="cards-grid" id="cardsGrid">
+          <div class="empty-state" id="cardsEmpty">
+            <i data-lucide="clipboard-list" class="empty-icon"></i>
+            <h3>No Task Cards Yet</h3>
+            <p>Create your first flip task card or pick a Smart Flip suggestion.</p>
+            <button class="btn btn-primary" id="newCardBtnEmpty"><i data-lucide="plus"></i> Create Card</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- History Panel -->
+      <div class="feed-panel" id="feedHistory" style="display:none">
+        <div class="history-summary" id="historySummary">
+          <div class="history-kpi">
+            <span class="history-kpi-label">Total Profit</span>
+            <span class="history-kpi-value profit-text" id="histTotalProfit">0 GP</span>
+          </div>
+          <div class="history-kpi">
+            <span class="history-kpi-label">Flips Done</span>
+            <span class="history-kpi-value" id="histFlipsDone">0</span>
+          </div>
+          <div class="history-kpi">
+            <span class="history-kpi-label">Avg ROI</span>
+            <span class="history-kpi-value" id="histAvgROI">0%</span>
+          </div>
+          <div class="history-kpi">
+            <span class="history-kpi-label">Total Tax Paid</span>
+            <span class="history-kpi-value" id="histTotalTax">0 GP</span>
+          </div>
+          <div class="history-kpi">
+            <span class="history-kpi-label">Best Flip</span>
+            <span class="history-kpi-value profit-text" id="histBestFlip">—</span>
+          </div>
+          <div class="history-kpi">
+            <span class="history-kpi-label">Karma Gold Earned</span>
+            <span class="history-kpi-value" id="histKarmaGold">0</span>
+          </div>
+        </div>
+        <div class="history-actions-bar">
+          <button class="btn btn-danger btn-sm" id="clearHistoryBtn"><i data-lucide="trash-2"></i> Clear History</button>
+        </div>
+        <div class="history-list" id="historyList">
+          <div class="empty-state" id="historyEmpty">
+            <i data-lucide="history" class="empty-icon"></i>
+            <h3>No History Yet</h3>
+            <p>Complete a flip to see it here.</p>
+          </div>
         </div>
       </div>
     </section>
@@ -263,7 +342,7 @@
     <!-- STATS PAGE -->
     <section class="page" id="page-stats" style="display:none">
       <div class="page-header">
-        <h1 class="page-title">Stats &amp; Gamification</h1>
+        <h1 class="page-title">Stats & Gamification</h1>
       </div>
       <div class="stats-kpi-grid" id="statsKPIs">
         <div class="kpi-card">
@@ -644,7 +723,7 @@
 <!-- Mobile Bottom Nav -->
 <nav class="mobile-nav" id="mobileNav">
   <a href="#cards" class="mobile-nav-item active" data-page="cards">
-    <i data-lucide="clipboard-list"></i><span>Cards</span>
+    <i data-lucide="clipboard-list"></i><span>Feed</span>
   </a>
   <a href="#scanner" class="mobile-nav-item" data-page="scanner">
     <i data-lucide="scan-search"></i><span>Scanner</span>
