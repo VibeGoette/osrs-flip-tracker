@@ -1,1 +1,1437 @@
-PLACEHOLDER
+/* ============================================================
+   OSRS Flipit2 — New Features CSS
+   All new styles for the feature expansion
+   ============================================================ */
+
+/* ========== TIER BADGE ========== */
+.tier-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  font-family: var(--font-display);
+  border: 1px solid transparent;
+}
+
+.pro-badge {
+  background: linear-gradient(135deg, #ff981f, #ffcc00);
+  color: #0e0e0e;
+  border-color: #ff981f;
+}
+
+.free-badge {
+  background: var(--surface-3);
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+
+.tier-badge:empty {
+  display: none;
+}
+
+/* ========== HEADER RIGHT SPACING ========== */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ========== FEED AUTH GATE ========== */
+.feed-auth-gate {
+  position: absolute;
+  inset: 0;
+  background: rgba(14, 14, 14, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  backdrop-filter: blur(4px);
+}
+
+.feed-auth-gate-inner {
+  max-width: 460px;
+  width: 90%;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-modal);
+  padding: 40px 32px;
+  text-align: center;
+}
+
+.gate-icon {
+  width: 48px;
+  height: 48px;
+  color: var(--gold);
+  margin: 0 auto 16px;
+  display: block;
+}
+
+.feed-auth-gate-inner h2 {
+  color: var(--text-bright);
+  font-size: 1.4rem;
+  margin-bottom: 8px;
+}
+
+.feed-auth-gate-inner > p {
+  color: var(--text-muted);
+  margin-bottom: 20px;
+  font-size: 0.95rem;
+}
+
+.gate-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.gate-note {
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  margin-top: 12px;
+  line-height: 1.4;
+}
+
+/* Page-cards relative for gate overlay */
+#page-cards {
+  position: relative;
+}
+
+/* ========== SMART FILTER BAR ========== */
+.smart-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 10px 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  flex-wrap: wrap;
+}
+
+.smart-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 200px;
+}
+
+.filter-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+/* Range Slider */
+.range-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  height: 4px;
+  background: var(--surface-4);
+  outline: none;
+  border-radius: 0;
+  cursor: pointer;
+  min-width: 120px;
+  touch-action: manipulation;
+}
+
+.range-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: var(--gold);
+  cursor: pointer;
+  border-radius: 0;
+  transition: background 0.15s;
+}
+
+.range-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: var(--gold);
+  cursor: pointer;
+  border: none;
+  border-radius: 0;
+}
+
+.range-slider:focus::-webkit-slider-thumb {
+  background: var(--gold-dim);
+  box-shadow: 0 0 0 3px var(--gold-glow);
+}
+
+/* Filter Select */
+.filter-select {
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  color: var(--text-bright);
+  padding: 4px 8px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  outline: none;
+  min-width: 140px;
+}
+
+.filter-select:focus {
+  border-color: var(--gold);
+}
+
+.filter-select option {
+  background: var(--surface-2);
+  color: var(--text-bright);
+}
+
+/* ========== FILTER TOGGLE (checkbox in Smart Flips bar) ========== */
+.filter-toggle-group {
+  min-width: auto;
+}
+
+.filter-toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  transition: color 0.15s;
+}
+
+.filter-toggle-label:hover {
+  color: var(--text-bright);
+}
+
+.filter-checkbox {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-strong);
+  background: var(--surface-3);
+  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.filter-checkbox:checked {
+  background: var(--gold);
+  border-color: var(--gold);
+}
+
+.filter-checkbox:checked::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 4px;
+  width: 5px;
+  height: 9px;
+  border: solid #0e0e0e;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.filter-checkbox:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.filter-toggle-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.filter-toggle-text svg,
+.filter-toggle-text i {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+/* ========== FREE TIER BAR ========== */
+.free-tier-bar {
+  padding: 8px 16px;
+  background: rgba(255, 152, 31, 0.08);
+  border: 1px solid rgba(255, 152, 31, 0.2);
+  border-bottom: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.8rem;
+}
+
+#smartFreeTierText,
+#randomFreeTierText {
+  color: var(--gold);
+  font-weight: 600;
+}
+
+.free-tier-refreshes,
+#smartFreeRefreshesText,
+#randomFreeRefreshesText {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+/* ========== UPGRADE OVERLAY ========== */
+.upgrade-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  min-height: 200px;
+  background: linear-gradient(to bottom, rgba(14,14,14,0) 0%, rgba(14,14,14,0.97) 30%);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 10;
+  padding-bottom: 40px;
+  pointer-events: all;
+}
+
+.upgrade-prompt {
+  background: var(--surface);
+  border: 1px solid var(--gold);
+  box-shadow: 0 0 32px rgba(255,152,31,0.15);
+  padding: 24px 32px;
+  text-align: center;
+  max-width: 400px;
+  width: 90%;
+}
+
+.upgrade-prompt i {
+  color: var(--gold);
+  width: 32px;
+  height: 32px;
+  display: block;
+  margin: 0 auto 12px;
+}
+
+.upgrade-prompt h3 {
+  color: var(--text-bright);
+  margin-bottom: 8px;
+  font-size: 1.1rem;
+}
+
+.upgrade-prompt p {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  margin-bottom: 8px;
+}
+
+.upgrade-reset-text {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  margin-bottom: 16px;
+}
+
+.upgrade-prompt .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Feed panels need position relative for upgrade overlay */
+#feedSmart,
+#feedRandom {
+  position: relative;
+}
+
+/* ========== FEED PANEL ========== */
+.feed-panel {
+  padding: 0;
+}
+
+.feed-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.feed-panel-desc {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* ========== FEED CARDS GRID — RESPONSIVE ========== */
+/* Override style.css auto-fill with explicit 3/2/1 column breakpoints */
+.feed-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  padding: 16px;
+}
+
+@media (max-width: 1100px) {
+  .feed-cards-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 680px) {
+  .feed-cards-grid {
+    grid-template-columns: 1fr;
+    padding: 12px;
+    gap: 12px;
+  }
+}
+
+/* Feed card is clickable */
+.feed-card {
+  cursor: pointer;
+  position: relative;
+}
+
+.feed-card::after {
+  content: "›";
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  color: var(--text-dim);
+  font-size: 1rem;
+  transition: color var(--transition);
+  pointer-events: none;
+}
+
+.feed-card:hover::after {
+  color: var(--gold);
+}
+
+/* Feed card actions stay above the caret pseudo */
+.feed-card-actions {
+  position: relative;
+  z-index: 2;
+}
+
+/* ========== FEED CARD TREND ROW ========== */
+.feed-card-trend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0 2px 0;
+  border-top: 1px solid var(--border);
+  margin-top: 6px;
+  min-height: 24px;
+}
+
+/* Trend badge variants */
+.feed-trend-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border: 1px solid;
+  letter-spacing: 0.03em;
+  font-family: var(--font-display);
+}
+
+.feed-card-7d-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  letter-spacing: 0.03em;
+  font-family: var(--font-display);
+  color: var(--text-dim);
+  background: transparent;
+}
+
+/* ========== TREND CLASSES (used in badges, detail page, history) ========== */
+.trend-up {
+  color: var(--green);
+  border-color: rgba(0, 255, 0, 0.3);
+  background: rgba(0, 255, 0, 0.07);
+}
+
+.trend-down {
+  color: var(--red);
+  border-color: rgba(255, 68, 68, 0.3);
+  background: rgba(255, 68, 68, 0.07);
+}
+
+.trend-neutral {
+  color: #ffcc00;
+  border-color: rgba(255, 204, 0, 0.3);
+  background: rgba(255, 204, 0, 0.07);
+}
+
+.trend-up-text { color: var(--green); font-weight: 700; }
+.trend-down-text { color: var(--red); font-weight: 700; }
+.trend-neutral-text { color: #ffcc00; font-weight: 700; }
+
+/* ========== MEMBERS BADGE ON CARD ========== */
+.members-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  background: var(--gold);
+  color: #0e0e0e;
+  padding: 1px 5px;
+  margin-left: 4px;
+  letter-spacing: 0.05em;
+  font-family: var(--font-display);
+  align-self: flex-start;
+  flex-shrink: 0;
+}
+
+/* ========== FEED CARD STAT LABEL WRAPPING ========== */
+.feed-card-stat-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ========== ITEM DETAIL PAGE ========== */
+#page-itemdetail {
+  padding: 0;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+  animation: fadeInPage 0.15s ease;
+}
+
+@keyframes fadeInPage {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.itemdetail-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.itemdetail-back {
+  flex-shrink: 0;
+}
+
+.itemdetail-title-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+}
+
+.itemdetail-icon {
+  width: 40px;
+  height: 40px;
+  image-rendering: pixelated;
+  flex-shrink: 0;
+}
+
+.itemdetail-name {
+  font-size: 1.4rem;
+  color: var(--text-bright);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.itemdetail-members-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  letter-spacing: 0.05em;
+  font-family: var(--font-display);
+  display: inline-block;
+  margin-top: 2px;
+}
+
+.badge-members {
+  background: var(--gold);
+  color: #0e0e0e;
+}
+
+.badge-f2p {
+  background: var(--surface-3);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.itemdetail-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.refresh-btn-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.refresh-countdown {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+#itemDetailRefreshBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.itemdetail-body {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 1100px;
+}
+
+.itemdetail-body > * {
+  flex-shrink: 0;
+}
+
+/* Key stats grid */
+.itemdetail-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+}
+
+.itemdetail-stat {
+  background: var(--surface);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.itemdetail-stat-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.itemdetail-stat-value {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-bright);
+  font-family: var(--font-display);
+}
+
+/* Trend indicators in item detail page */
+.itemdetail-trends {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.trend-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 12px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+}
+
+.trend-card-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.trend-card-value {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.trend-card-value .trend-up,
+.trend-card-value .trend-down,
+.trend-card-value .trend-neutral {
+  font-size: 1rem;
+}
+
+#itemDetail1dTrend,
+#itemDetail7dTrend {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+/* Price history chart card */
+.itemdetail-chart-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.itemdetail-chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.itemdetail-chart-header h3 {
+  font-size: 0.9rem;
+  color: var(--text-bright);
+  margin: 0;
+}
+
+.chart-legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.chart-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.itemdetail-chart-wrap {
+  height: 280px;
+  padding: 16px 12px 12px;
+  position: relative;
+}
+
+.itemdetail-chart-wrap canvas,
+#itemDetailChart {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Action buttons */
+.itemdetail-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 24px;
+}
+
+.itemdetail-action-btn {
+  min-width: 140px;
+}
+
+/* ========== SCANNER ROW HOVER / CURSOR ========== */
+.scanner-row {
+  cursor: pointer;
+}
+
+.scanner-row:hover td {
+  background: var(--surface-2);
+}
+
+/* ========== HISTORY: DELETE BUTTON PER ENTRY ========== */
+/* Add padding-right to make room for the trash button */
+.history-entry {
+  position: relative;
+  padding-right: 36px;
+}
+
+.history-delete-btn {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  opacity: 0;
+  transition: opacity var(--transition), color var(--transition);
+  color: var(--text-dim);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0;
+}
+
+.history-entry:hover .history-delete-btn {
+  opacity: 1;
+}
+
+.history-delete-btn:hover {
+  color: var(--red);
+}
+
+.history-delete-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Always show on touch devices */
+@media (hover: none) {
+  .history-delete-btn {
+    opacity: 1;
+    color: var(--text-dim);
+  }
+}
+
+/* ========== ADMIN FREE TIER CONFIG GRID ========== */
+.admin-freetier-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.admin-editor h3 {
+  margin-bottom: 16px;
+  color: var(--gold);
+  font-size: 0.95rem;
+  letter-spacing: 0.05em;
+}
+
+.admin-panel .card {
+  margin-bottom: 0;
+}
+
+/* ========== CARDS GRID RESPONSIVE ========== */
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  padding: 16px;
+}
+
+@media (max-width: 1100px) {
+  .cards-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 680px) {
+  .cards-grid {
+    grid-template-columns: 1fr;
+    padding: 12px;
+    gap: 12px;
+  }
+}
+
+/* ========== WATCHLIST GRID RESPONSIVE ========== */
+.watchlist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+  padding: 16px;
+}
+
+@media (max-width: 680px) {
+  .watchlist-grid {
+    grid-template-columns: 1fr;
+    padding: 12px;
+  }
+}
+
+/* ========== BUTTON ACTIVE STATE ========== */
+.btn:active {
+  transform: scale(0.97);
+}
+
+/* ========== RESPONSIVE: MOBILE ADJUSTMENTS ========== */
+
+/* Touch targets for range sliders */
+@media (hover: none) and (pointer: coarse) {
+  .range-slider::-webkit-slider-thumb {
+    width: 22px;
+    height: 22px;
+  }
+
+  .range-slider::-moz-range-thumb {
+    width: 22px;
+    height: 22px;
+  }
+
+  .filter-select {
+    padding: 8px 10px;
+    font-size: 0.9rem;
+  }
+}
+
+/* Smart filter bar sticky on mobile */
+@media (max-width: 680px) {
+  .smart-filter-bar {
+    position: sticky;
+    top: var(--header-h);
+    z-index: 5;
+    background: var(--surface-2);
+    padding: 10px 12px;
+    gap: 12px;
+  }
+
+  .smart-filter-group {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .range-slider {
+    width: 100%;
+  }
+
+  .feed-flip-btn,
+  .feed-skip-btn {
+    min-height: 40px;
+    font-size: 0.85rem;
+  }
+
+  .free-tier-bar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .gate-buttons {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .feed-auth-gate-inner {
+    padding: 28px 20px;
+  }
+}
+
+/* Tablet breakpoints */
+@media (max-width: 900px) {
+  .itemdetail-stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Item detail mobile */
+@media (max-width: 680px) {
+  .itemdetail-header {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+
+  .itemdetail-name {
+    font-size: 1.1rem;
+  }
+
+  .itemdetail-body {
+    padding: 14px 14px;
+    gap: 14px;
+  }
+
+  .itemdetail-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .itemdetail-chart-wrap {
+    height: 200px;
+  }
+
+  .itemdetail-actions {
+    flex-direction: column;
+  }
+
+  .itemdetail-action-btn {
+    width: 100%;
+    min-height: 44px;
+    font-size: 0.9rem;
+  }
+
+  .itemdetail-back {
+    min-height: 38px;
+  }
+
+  .itemdetail-header-actions {
+    width: 100%;
+  }
+
+  .refresh-btn-wrap {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .itemdetail-trends {
+    flex-direction: column;
+  }
+
+  .trend-card {
+    width: 100%;
+  }
+}
+
+/* Smallest screens */
+@media (max-width: 480px) {
+  .itemdetail-back {
+    order: -1;
+  }
+
+  .itemdetail-title-row {
+    order: 0;
+    width: 100%;
+  }
+
+  .itemdetail-header {
+    flex-wrap: wrap;
+  }
+
+  .itemdetail-chart-wrap {
+    height: 180px;
+    padding: 10px 8px 8px;
+  }
+
+  .itemdetail-chart-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+}
+
+@media (max-width: 400px) {
+  .itemdetail-stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ========== DESKTOP: CENTER ITEM DETAIL BODY ========== */
+@media (min-width: 900px) {
+  .itemdetail-body {
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+}
+
+/* ============================================================
+   RUNELITE PLUGIN WIDTH (280-400px) + ENHANCED MOBILE
+   The RuneLite plugin panel is typically 280-350px wide.
+   These rules ensure every component fits in narrow containers.
+   ============================================================ */
+
+/* --- Extra-narrow: RuneLite plugin panel (max 400px) --- */
+@media (max-width: 400px) {
+  /* Force single-column cards everywhere */
+  .feed-cards-grid,
+  .cards-grid,
+  .watchlist-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 8px;
+  }
+
+  /* Compact card padding */
+  .feed-card {
+    padding: 12px;
+    min-height: auto;
+  }
+
+  .feed-card-header {
+    padding-right: 60px;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .feed-card-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .feed-card-name {
+    font-size: 0.95rem;
+  }
+
+  .feed-card-badge {
+    font-size: 0.58rem;
+    padding: 2px 5px;
+    top: 8px;
+    right: 8px;
+  }
+
+  /* Stats: 2 columns at narrow width */
+  .feed-card-prices {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .feed-card-stat-label {
+    font-size: 0.68rem;
+  }
+
+  .feed-card-stat-value {
+    font-size: 0.82rem;
+  }
+
+  .feed-card-profit-row {
+    padding: 6px 0 4px;
+  }
+
+  .feed-card-profit-label {
+    font-size: 0.72rem;
+  }
+
+  .feed-card-profit-value {
+    font-size: 1rem;
+  }
+
+  /* Card action buttons: full width, stacked */
+  .feed-card-actions {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .feed-card-actions .btn-flip,
+  .feed-card-actions .btn-skip {
+    width: 100%;
+    min-height: 38px;
+    font-size: 0.82rem;
+    justify-content: center;
+  }
+
+  /* Trend row compact */
+  .feed-card-trend-row {
+    gap: 4px;
+    padding: 3px 0 1px;
+  }
+
+  .feed-trend-badge,
+  .feed-card-7d-badge {
+    font-size: 0.65rem;
+    padding: 1px 5px;
+  }
+
+  /* Feed tabs: horizontal scroll, compact */
+  .feed-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 0;
+    scrollbar-width: none;
+  }
+  .feed-tabs::-webkit-scrollbar { display: none; }
+
+  .feed-tab {
+    padding: 7px 10px;
+    font-size: 0.72rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .feed-tab i,
+  .feed-tab svg {
+    width: 13px;
+    height: 13px;
+  }
+
+  /* Smart filter bar: vertical stack */
+  .smart-filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .smart-filter-group {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .filter-label {
+    font-size: 0.75rem;
+  }
+
+  .filter-select {
+    width: 100%;
+    min-width: 0;
+    font-size: 0.8rem;
+    padding: 6px 8px;
+  }
+
+  .filter-toggle-label {
+    font-size: 0.78rem;
+  }
+
+  /* Filter pills: wrap and compact */
+  .filter-bar {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .filter-pill {
+    padding: 5px 10px;
+    font-size: 0.72rem;
+  }
+
+  /* Page header compact */
+  .page-header {
+    padding: 10px 8px;
+    gap: 8px;
+  }
+
+  .page-title {
+    font-size: 1.15rem;
+  }
+
+  /* Scanner: table scrollable */
+  .table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .data-table {
+    min-width: 600px;
+    font-size: 0.78rem;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 6px 8px;
+  }
+
+  /* Scanner search box */
+  .scanner-controls {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .search-box {
+    width: 100%;
+  }
+
+  /* Free tier bar */
+  .free-tier-bar {
+    padding: 6px 10px;
+    font-size: 0.75rem;
+  }
+
+  /* Feed panel description */
+  .feed-panel-desc {
+    font-size: 0.78rem;
+  }
+
+  .feed-panel-header {
+    padding: 8px 10px;
+  }
+
+  /* Rank badge */
+  .feed-card-rank {
+    font-size: 0.65rem;
+    padding: 1px 5px;
+  }
+
+  /* Header compact */
+  .app-header {
+    padding: 0 8px;
+  }
+
+  .header-title {
+    font-size: 0.8rem;
+  }
+
+  .gamification-bar {
+    gap: 6px;
+    font-size: 0.72rem;
+  }
+
+  .level-badge {
+    font-size: 0.72rem;
+  }
+
+  .karma-badge {
+    font-size: 0.72rem;
+  }
+
+  .tier-badge {
+    font-size: 0.65rem;
+    padding: 1px 5px;
+  }
+
+  .api-timer {
+    font-size: 0.72rem;
+  }
+
+  /* Modal compact */
+  .modal {
+    width: 95%;
+    max-width: none;
+    margin: 10px;
+  }
+
+  .modal-body {
+    padding: 14px;
+  }
+
+  .modal-header {
+    padding: 12px 14px;
+  }
+
+  .modal-footer {
+    padding: 10px 14px;
+  }
+
+  /* Calculator compact */
+  .calc-layout {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .result-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* KPI cards compact */
+  .stats-kpi-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .kpi-card {
+    padding: 10px 12px;
+  }
+
+  .kpi-value {
+    font-size: 1.1rem;
+  }
+
+  /* History summary compact */
+  .history-summary {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .history-kpi {
+    padding: 6px 10px;
+  }
+
+  /* Guides tabs wrap */
+  .guides-tabs {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  /* Footer compact */
+  .app-footer {
+    font-size: 0.68rem;
+    padding: 8px;
+  }
+
+  /* Upgrade prompt compact */
+  .upgrade-prompt {
+    padding: 16px 14px;
+  }
+
+  .upgrade-prompt h3 {
+    font-size: 0.95rem;
+  }
+
+  .upgrade-prompt p {
+    font-size: 0.82rem;
+  }
+}
+
+/* --- Ultra-narrow: RuneLite minimum (max 320px) --- */
+@media (max-width: 320px) {
+  .feed-card {
+    padding: 10px;
+  }
+
+  .feed-card-header {
+    padding-right: 50px;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .feed-card-icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  .feed-card-name {
+    font-size: 0.85rem;
+  }
+
+  .feed-card-prices {
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+  }
+
+  .feed-card-stat-value {
+    font-size: 0.78rem;
+  }
+
+  .feed-card-profit-value {
+    font-size: 0.92rem;
+  }
+
+  .feed-tab {
+    padding: 6px 8px;
+    font-size: 0.68rem;
+  }
+
+  .filter-pill {
+    padding: 4px 7px;
+    font-size: 0.68rem;
+  }
+
+  .page-title {
+    font-size: 1rem;
+  }
+
+  /* Members badge smaller */
+  .members-badge {
+    font-size: 0.55rem;
+    padding: 0px 3px;
+  }
+
+  /* Header: hide non-essential */
+  .gamification-bar {
+    display: none;
+  }
+
+  .tier-badge {
+    display: none;
+  }
+
+  .api-timer {
+    font-size: 0.68rem;
+  }
+
+  .header-title {
+    font-size: 0.72rem;
+  }
+
+  /* Data table even more compact */
+  .data-table {
+    font-size: 0.72rem;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 4px 6px;
+  }
+
+  /* Stats compact */
+  .kpi-label {
+    font-size: 0.68rem;
+  }
+
+  .kpi-value {
+    font-size: 0.95rem;
+  }
+}
